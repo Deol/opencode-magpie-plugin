@@ -1,3 +1,4 @@
+import { lookupCatalogPrice, type ModelsDevCatalog } from './catalog-cache.js';
 import type { ModelPricingProvider } from './model-pricing.js';
 import { getModelPricing } from './model-pricing.js';
 import { type ModelInfo2, type ProviderInfo, toClassicModelInfo } from './opencode.js';
@@ -24,6 +25,10 @@ export type MagpieModel = {
 };
 
 export type Inventory = { info: ProviderInfo; models: ModelInfo2[] }[];
+
+/** Whether any model Magpie lists has no price in any source, which asks for a fresher catalog. */
+export const hasUnpricedModel = (inventory: Inventory): boolean =>
+  inventory.some((entry) => entry.models.some((model) => model.cost.length === 0));
 
 /** Routing groups route across providers, so they belong to Magpie itself rather than to a vendor. */
 const ROUTING_GROUP = 'magpie';
@@ -65,7 +70,38 @@ const providerName = (model: MagpieModel): string => {
   );
 };
 
-export const buildInventory = (rows: MagpieModel[], baseURL: string): Inventory => {
+/**
+ * How much a model is trusted to cost, in the order Magpie looks for a price:
+ * the built-in table, then Magpie's own price, then the models.dev catalog.
+ * Routing groups take Magpie's price only; their members are what Magpie routes to.
+ */
+export type PriceSource = 'builtin' | 'magpie' | 'models.dev' | 'none';
+
+export type InventoryOptions = {
+  /** The cached models.dev catalog, for models neither the built-in table nor Magpie prices. */
+  catalog?: ModelsDevCatalog;
+};
+
+const modelCost = (
+  row: MagpieModel,
+  group: boolean,
+  catalog: ModelsDevCatalog | undefined,
+): { cost: unknown; source: PriceSource } => {
+  const modelID = row.id.slice(row.id.indexOf('/') + 1);
+  const pricingID = modelID.replace(/@\d+(?:k|m)$/i, '');
+  const builtin = group ? undefined : getModelPricing(pricingID, pricingProvider(row.owned_by));
+  if (builtin) return { cost: builtin, source: 'builtin' };
+  if (row.magpie_price) return { cost: row.magpie_price, source: 'magpie' };
+  const listed = group ? undefined : lookupCatalogPrice(catalog, row.owned_by, pricingID);
+  if (listed) return { cost: listed, source: 'models.dev' };
+  return { cost: undefined, source: 'none' };
+};
+
+export const buildInventory = (
+  rows: MagpieModel[],
+  baseURL: string,
+  options: InventoryOptions = {},
+): Inventory => {
   const providers = new Map<string, Inventory[number]>();
   rows
     .filter((row) => !row.kind && row.id.includes('/'))
@@ -75,10 +111,8 @@ export const buildInventory = (rows: MagpieModel[], baseURL: string): Inventory 
       // Names are the Magpie groups; IDs are namespaced so an existing Cursor plugin is not replaced.
       const providerID = `magpie-${encodeURIComponent(owner)}`;
       const modelID = row.id.slice(row.id.indexOf('/') + 1);
-      const pricingID = modelID.replace(/@\d+(?:k|m)$/i, '');
-      const cost =
-        (!group ? getModelPricing(pricingID, pricingProvider(owner)) : undefined) ??
-        row.magpie_price;
+      const { cost } = modelCost(row, group, options.catalog);
+
       const model = toClassicModelInfo(providerID, modelID, {
         id: row.id,
         name: row.display_name ?? modelID,

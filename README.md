@@ -55,7 +55,7 @@ OpenCode V2
 
 ```jsonc
 {
-  "plugins": ["opencode-magpie-plugin@0.1.4"]
+  "plugins": ["opencode-magpie-plugin@0.1.5"]
 }
 ```
 
@@ -138,7 +138,14 @@ MAGPIE_ADDR=127.0.0.1:3426 opencode --standalone
 
 1. 内置价格表，优先应用已识别 provider 的专属覆盖。
 2. 内置表未覆盖时，使用 Magpie 返回的 `magpie_price`。
-3. 两边均没有价格时，不启用该模型，避免把未知价格显示为免费。
+3. 普通模型仍缺价时，查询 models.dev 本地缓存：优先同 provider 的精确 ID，再查已识别厂商（OpenAI、Anthropic、DeepSeek、Google、xAI）的精确 ID 或 `canonical_model_id`。不跨版本猜价、不采用其他转售商报价、不使用订阅 plan 目录的零价。
+4. 所有来源均没有价格时，不启用该模型，避免把未知价格显示为免费。路由分组仍只用 Magpie 报价，不根据 `auto-*` 名称推断成员价格。
+
+models.dev 缓存写入 `$XDG_CACHE_HOME/opencode-magpie-plugin/models.json`（默认 `~/.cache/opencode-magpie-plugin/models.json`）。首次可只读复用 Magpie、OpenCode 的 `models.json`；下载只写插件自己的目录。每次模型刷新检查缓存，超过 24 小时后台更新，缺价时可提前到 6 小时；同进程下载去重且失败后至少间隔 6 小时重试。首次下载和更新不阻塞模型发现，成功后下一次 30 秒刷新采用新目录；离线保留旧缓存。下载源为 `https://models.dev/api.json`，仍然零运行时依赖，目前只采用基础价，未接入阶梯价。
+
+### 0.1.5
+
+新增 models.dev 缓存作为缺价兜底，不改动内置费率和 provider 覆盖。补充的价格来自 models.dev，对应目录更新后可能变化；以实际服务账单为准。
 
 Cursor 使用 `cursor` 覆盖，WorkBuddy 使用 `codebuddy` 覆盖；其他已识别服务按表中对应 provider 处理。Routing group 只用 Magpie 提供的价格，不按成员猜测。明确记录的零价格仍视为有效价格。
 

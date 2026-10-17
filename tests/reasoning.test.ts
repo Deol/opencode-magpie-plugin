@@ -79,8 +79,9 @@ describe('Magpie reasoning controls', () => {
 
   it('accepts string-form supported levels and retains routing-group choices', () => {
     const row = { ...cursor, id: 'group/fast', supported_reasoning_levels: ['low', 'high'] };
-    const model = buildInventory([row], 'http://localhost:3425')[0].models[0];
-    expect(model.modelID).toBe('group/fast');
-    expect(model.variants.map((variant) => variant.id)).toEqual(['low', 'high']);
+    const entry = buildInventory([row], 'http://localhost:3425')[0];
+    expect(entry.info.name).toBe('Magpie');
+    expect(entry.models[0].modelID).toBe('group/fast');
+    expect(entry.models[0].variants.map((variant) => variant.id)).toEqual(['low', 'high']);
   });
 });

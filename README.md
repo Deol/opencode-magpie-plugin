@@ -14,7 +14,7 @@ Magpie 管理多个服务的账号、模型、协议转换和路由；这个插�
 
 ```text
 OpenCode V2
-  ├─ /models：Cursor、WorkBuddy、独立 routing group
+  ├─ /models：Cursor、WorkBuddy、Magpie（路由分组）
   ├─ 模型能力、上下文限制、reasoning 档位和价格
   └─ 原生 Chat / Responses / Anthropic 请求
           ↓
@@ -25,7 +25,7 @@ OpenCode V2
 
 - `opencode.jsonc` 只加载插件，不维护 `providers.models`。
 - 启动时发现目录，每 30 秒刷新；服务新增、模型下线都能反映到 OpenCode。
-- Provider 显示 Magpie 中的分组名称，而不是统一挤在一个 “Magpie” 下。
+- Provider 显示 Magpie 中的分组名称，而不是统一挤在一个 “Magpie” 下；路由分组统一归入 Magpie。
 - 内置独立价格表和模型名归一化逻辑，支持输入、输出、缓存读取与写入价格。
 - Magpie 已安装但未运行时自动执行 `magpie serve`；未安装时给出安装链接。
 - 登录和服务凭据由 Magpie 管理，插件不需要复制上游 token。
@@ -55,7 +55,7 @@ OpenCode V2
 
 ```jsonc
 {
-  "plugins": ["opencode-magpie-plugin@0.1.3"]
+  "plugins": ["opencode-magpie-plugin@0.1.4"]
 }
 ```
 
@@ -77,10 +77,11 @@ opencode service restart
 | --- | --- | --- | --- |
 | Cursor | `magpie-cursor` | `magpie-cursor/gpt-5.5` | `cursor/gpt-5.5` |
 | WorkBuddy | `magpie-workbuddy` | `magpie-workbuddy/claude-opus-4-6` | `workbuddy/claude-opus-4-6` |
+| Magpie | `magpie-magpie` | `magpie-magpie/auto` | `group/auto` |
 
 示例模型仅说明格式，实际列表取决于 Magpie 当前账号与配置。Magpie 自定义 provider ID 会原样映射为带 `magpie-` 前缀的 ID。
 
-Magpie 的 routing group（例如 `group/fast`）单独成为一个分组，内部 provider ID 为 `magpie-group%2Ffast`，发送时仍保留 `group/fast`，不会误归到第一个候选服务。
+Routing group（例如 `group/auto`）会跨多个服务路由，因此不按 `owned_by` 或首个候选服务拆成 provider，而是统一归到 **Magpie** 分组下。发送时仍保留 `group/auto`，价格只用 Magpie 给出的价格，不按成员猜测。
 
 ## 自动发现与请求行为
 
@@ -139,7 +140,7 @@ MAGPIE_ADDR=127.0.0.1:3426 opencode --standalone
 2. 内置表未覆盖时，使用 Magpie 返回的 `magpie_price`。
 3. 两边均没有价格时，不启用该模型，避免把未知价格显示为免费。
 
-Cursor 使用 `cursor` 覆盖，WorkBuddy 使用 `codebuddy` 覆盖；其他已识别服务按表中对应 provider 处理。Routing group 使用 Magpie 提供的价格，不按首个成员猜测。明确记录的零价格仍视为有效价格。
+Cursor 使用 `cursor` 覆盖，WorkBuddy 使用 `codebuddy` 覆盖；其他已识别服务按表中对应 provider 处理。Routing group 只用 Magpie 提供的价格，不按成员猜测。明确记录的零价格仍视为有效价格。
 
 所有价格单位都是 **美元 / 百万 token**。OpenCode 用这些单价计算请求费用。普通计费的概念公式为：
 

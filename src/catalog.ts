@@ -25,6 +25,9 @@ export type MagpieModel = {
 
 export type Inventory = { info: ProviderInfo; models: ModelInfo2[] }[];
 
+/** Routing groups route across providers, so they belong to Magpie itself rather than to a vendor. */
+const ROUTING_GROUP = 'magpie';
+
 const reasoningVariants = (row: MagpieModel, anthropic: boolean): ModelInfo2['variants'] => {
   if (row.reasoning === false) return [];
   const levels =
@@ -68,7 +71,7 @@ export const buildInventory = (rows: MagpieModel[], baseURL: string): Inventory 
     .filter((row) => !row.kind && row.id.includes('/'))
     .forEach((row) => {
       const group = row.id.startsWith('group/');
-      const owner = group ? row.id : row.owned_by;
+      const owner = group ? ROUTING_GROUP : row.owned_by;
       // Names are the Magpie groups; IDs are namespaced so an existing Cursor plugin is not replaced.
       const providerID = `magpie-${encodeURIComponent(owner)}`;
       const modelID = row.id.slice(row.id.indexOf('/') + 1);
@@ -106,7 +109,7 @@ export const buildInventory = (rows: MagpieModel[], baseURL: string): Inventory 
       const entry = providers.get(providerID) ?? {
         info: {
           id: providerID,
-          name: group ? (row.display_name ?? modelID) : providerName(row),
+          name: group ? 'Magpie' : providerName(row),
           activation: 'enabled' as const,
           package: '@opencode/ai/providers/openai-compatible',
           settings: {

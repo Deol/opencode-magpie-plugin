@@ -52,17 +52,33 @@ describe('Magpie discovery', () => {
     );
   });
 
-  it('keeps routing groups separate from the provider of their first member', () => {
-    const group = {
+  it('groups every routing group under Magpie instead of a member provider', () => {
+    const fast = {
       ...row('cursor'),
       id: 'group/fast',
       display_name: 'Fast',
       magpie_price: { input: 2, output: 8 },
     };
-    const catalog = buildInventory([row('cursor'), group], 'http://localhost:3425');
-    expect(catalog[1].info.name).toBe('Fast');
-    expect(catalog[1].models[0].modelID).toBe('group/fast');
-    expect(catalog[1].models[0].cost[0]).toMatchObject({ input: 2, output: 8 });
+    // The live gateway reports the routing group's owned_by as one of its members.
+    const auto = {
+      ...row('workbuddy', 'auto'),
+      id: 'group/auto',
+      display_name: 'Auto',
+      owned_by: 'workbuddy',
+      magpie_price: { input: 1, output: 3 },
+    };
+    const catalog = buildInventory(
+      [row('cursor'), row('workbuddy'), fast, auto],
+      'http://localhost:3425',
+    );
+    expect(catalog.map((entry) => entry.info.name)).toEqual(['Cursor', 'WorkBuddy', 'Magpie']);
+    const magpie = catalog[2];
+    expect(magpie.info.id).toBe('magpie-magpie');
+    expect(magpie.models.map((model) => model.modelID)).toEqual(['group/fast', 'group/auto']);
+    expect(magpie.models[0].providerID).toBe('magpie-magpie');
+    expect(magpie.models[0].cost[0]).toMatchObject({ input: 2, output: 8 });
+    expect(catalog[0].models.map((model) => model.modelID)).toEqual(['cursor/gpt-5.5']);
+    expect(catalog[1].models.map((model) => model.modelID)).toEqual(['workbuddy/gpt-5.5']);
   });
 
   it('preserves protocol, modalities, limits and reasoning choices', () => {

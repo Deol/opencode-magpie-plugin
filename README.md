@@ -88,6 +88,8 @@ Magpie 的 routing group（例如 `group/fast`）单独成为一个分组，内�
 
 目录映射保留模型的上下文窗口、最大输出、输入输出模态和 reasoning 档位。仅发现聊天目录；重复的无 provider 前缀别名、图片生成或其他非聊天专用模型不会注册为聊天模型。
 
+思考强度读取新版 `reasoning_levels`，并兼容已安装版本常见的 `supported_reasoning_levels`（`{ effort }` 对象或字符串列表）。只有网关实际声明的档位才会出现，可在 OpenCode 的模型变体控件中选择，或使用 `provider/model#high` 这样的引用。`default` 保留服务默认行为，不额外生成档位；网关未提供档位时不会凭模型名称猜测。
+
 根据 `native_endpoints` 选择 OpenCode 内置 runtime：
 
 | Magpie 元数据 | OpenCode runtime |
@@ -97,6 +99,8 @@ Magpie 的 routing group（例如 `group/fast`）单独成为一个分组，内�
 | 其他情况 | `openai-compatible`（Chat Completions） |
 
 消息、工具调用和工具结果由 OpenCode 原生 runtime 编码，再由 Magpie 转接。插件传递 `X-Magpie-Session` 保持会话标识，并指定 HTTP 传输。模型上游支持的完整能力仍取决于 Magpie 和相应服务。
+
+思考档位按所选协议编码：Chat 使用 `reasoning_effort`，Responses 使用 `reasoning.effort`，Anthropic 使用 `thinking.type=adaptive` 配合 `output_config.effort`；Anthropic 的 `none` 关闭 thinking。
 
 刷新成功时替换完整目录；刷新失败保留最近一次成功的目录。首次发现失败会报告初始化错误，不生成虚假的可用模型。
 

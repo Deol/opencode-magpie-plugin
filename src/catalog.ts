@@ -10,7 +10,9 @@ export type MagpieModel = {
   context_window?: number;
   max_output_tokens?: number;
   native_endpoints?: string[];
+  reasoning?: boolean;
   reasoning_levels?: string[];
+  supported_reasoning_levels?: (string | { effort: string })[];
   modalities?: { input?: string[]; output?: string[] };
   kind?: string;
   magpie_price?: {
@@ -22,6 +24,26 @@ export type MagpieModel = {
 };
 
 export type Inventory = { info: ProviderInfo; models: ModelInfo2[] }[];
+
+const reasoningVariants = (row: MagpieModel, anthropic: boolean): ModelInfo2['variants'] => {
+  if (row.reasoning === false) return [];
+  const levels =
+    row.reasoning_levels ??
+    row.supported_reasoning_levels?.map((level) =>
+      typeof level === 'string' ? level : level.effort,
+    ) ??
+    [];
+  return [...new Set(levels)]
+    .filter((effort) => effort && effort !== 'default')
+    .map((effort) => ({
+      id: effort,
+      settings: anthropic
+        ? effort === 'none'
+          ? { thinking: { type: 'disabled' } }
+          : { thinking: { type: 'adaptive' }, effort }
+        : { reasoningEffort: effort },
+    }));
+};
 
 const pricingProvider = (owner: string): ModelPricingProvider | undefined => {
   const id = owner.toLowerCase();
@@ -50,8 +72,10 @@ export const buildInventory = (rows: MagpieModel[], baseURL: string): Inventory 
       // Names are the Magpie groups; IDs are namespaced so an existing Cursor plugin is not replaced.
       const providerID = `magpie-${encodeURIComponent(owner)}`;
       const modelID = row.id.slice(row.id.indexOf('/') + 1);
+      const pricingID = modelID.replace(/@\d+(?:k|m)$/i, '');
       const cost =
-        (!group ? getModelPricing(modelID, pricingProvider(owner)) : undefined) ?? row.magpie_price;
+        (!group ? getModelPricing(pricingID, pricingProvider(owner)) : undefined) ??
+        row.magpie_price;
       const model = toClassicModelInfo(providerID, modelID, {
         id: row.id,
         name: row.display_name ?? modelID,
@@ -78,10 +102,7 @@ export const buildInventory = (rows: MagpieModel[], baseURL: string): Inventory 
         apiKey: 'magpie',
         transport: 'http',
       };
-      model.variants = (row.reasoning_levels ?? []).map((effort) => ({
-        id: effort,
-        settings: { reasoningEffort: effort },
-      }));
+      model.variants = reasoningVariants(row, !!anthropic);
       const entry = providers.get(providerID) ?? {
         info: {
           id: providerID,

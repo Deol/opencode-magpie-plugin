@@ -1,0 +1,72 @@
+{
+  "name": "opencode-magpie-plugin",
+  "version": "0.1.0",
+  "description": "Discover Magpie providers and models in OpenCode V2 with built-in pricing and automatic local gateway startup",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./server": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./pricing": {
+      "types": "./dist/model-pricing.d.mts",
+      "import": "./dist/model-pricing.mjs",
+      "default": "./dist/model-pricing.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "tsdown",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "biome check src tests tsdown.config.ts package.json",
+    "check": "pnpm type-check && pnpm lint && pnpm test && pnpm build",
+    "prepublishOnly": "pnpm check"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.1",
+    "@types/node": "^22.0.0",
+    "tsdown": "^0.17.4",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yee94/opencode-magpie-plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yee94/opencode-magpie-plugin/issues"
+  },
+  "homepage": "https://github.com/yee94/opencode-magpie-plugin#readme",
+  "author": "yee94",
+  "keywords": [
+    "opencode",
+    "magpie",
+    "plugin",
+    "cursor",
+    "workbuddy",
+    "llm",
+    "gateway"
+  ],
+  "license": "MIT"
+}

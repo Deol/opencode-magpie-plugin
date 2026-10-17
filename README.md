@@ -55,7 +55,7 @@ OpenCode V2
 
 ```jsonc
 {
-  "plugins": ["opencode-magpie-plugin@0.1.0"]
+  "plugins": ["opencode-magpie-plugin@0.1.1"]
 }
 ```
 
@@ -218,8 +218,9 @@ curl -H 'Authorization: Bearer magpie' -H 'X-Magpie-Prices: 1' \
 ```sh
 pnpm check
 pnpm pack
-pnpm publish --access public --registry=https://registry.npmjs.org/
 ```
+
+维护者发布采用 tag 驱动：推送与 `package.json.version` 一致的 `v<version>` tag 后，GitHub Actions 自动检查、发布公网 npm 并创建 GitHub Release。正式版使用 `latest`，预发布版使用 `next`。完整步骤、认证要求与失败恢复见 [发布指南](docs/releasing.md)。
 
 测试覆盖目录分组与替换、wire model ID、协议元数据、价格归一化与覆盖、未知价格、会话头、网关身份检查、自动启动与并发去重、未安装提示、刷新失败和清理。测试不消耗真实服务额度。
 

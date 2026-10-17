@@ -1,6 +1,6 @@
 {
   "name": "opencode-magpie-plugin",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Discover Magpie providers and models in OpenCode V2 with built-in pricing and automatic local gateway startup",
   "type": "module",
   "main": "./dist/index.mjs",
@@ -35,7 +35,7 @@
     "build": "tsdown",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "biome check src tests tsdown.config.ts package.json",
+    "lint": "biome check src tests scripts tsdown.config.ts package.json",
     "check": "pnpm type-check && pnpm lint && pnpm test && pnpm build",
     "prepublishOnly": "pnpm check"
   },

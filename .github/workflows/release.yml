@@ -40,38 +40,53 @@ jobs:
           if (pkg.private || Object.keys(pkg.dependencies ?? {}).length) {
             throw new Error('The public plugin must have zero runtime dependencies');
           }
-          const response = await fetch(`https://registry.npmjs.org/${pkg.name}/${pkg.version}`);
-          let published = false;
-          if (response.ok) {
-            const existing = await response.json();
-            if (existing.gitHead !== process.env.GITHUB_SHA) {
-              throw new Error('This npm version belongs to a different commit; bump the version');
-            }
-            published = true;
-          } else if (response.status !== 404) {
-            throw new Error(`npm registry returned ${response.status}`);
-          }
           appendFileSync(process.env.GITHUB_OUTPUT,
-            `version=${pkg.version}\ndist-tag=${pkg.version.includes('-') ? 'next' : 'latest'}\npublished=${published}\n`);
+            `version=${pkg.version}\ndist-tag=${pkg.version.includes('-') ? 'next' : 'latest'}\n`);
           JS
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
 
+      - name: Pack and check existing version
+        id: artifact
+        run: |
+          pnpm pack --pack-destination "$RUNNER_TEMP/magpie-release"
+          node --input-type=module <<'JS'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          import { tarballIntegrity, assertPublishedArtifact } from './scripts/release-metadata.mjs';
+          const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+          const tarball = join(process.env.RUNNER_TEMP, 'magpie-release', `${pkg.name}-${pkg.version}.tgz`);
+          const integrity = tarballIntegrity(readFileSync(tarball));
+          const response = await fetch(`https://registry.npmjs.org/${pkg.name}/${pkg.version}`);
+          let published = false;
+          if (response.ok) {
+            assertPublishedArtifact(await response.json(), { ...pkg, integrity });
+            published = true;
+          } else if (response.status !== 404) {
+            throw new Error(`npm registry returned ${response.status}`);
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `tarball=${tarball}\nintegrity=${integrity}\npublished=${published}\n`);
+          JS
+
       - name: Publish to public npm
-        if: steps.release.outputs.published != 'true'
+        if: steps.artifact.outputs.published != 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           DIST_TAG: ${{ steps.release.outputs.dist-tag }}
+          TARBALL: ${{ steps.artifact.outputs.tarball }}
         run: |
           test -n "$NODE_AUTH_TOKEN" || { echo 'Missing NPM_TOKEN repository secret'; exit 1; }
-          pnpm publish --no-git-checks --ignore-scripts --access public --tag "$DIST_TAG" --registry=https://registry.npmjs.org/
+          pnpm publish "$TARBALL" --no-git-checks --ignore-scripts --access public --tag "$DIST_TAG" --registry=https://registry.npmjs.org/
 
       - name: Verify public registry metadata
+        env:
+          EXPECTED_INTEGRITY: ${{ steps.artifact.outputs.integrity }}
         run: |
           node --input-type=module <<'JS'
           import { readFileSync } from 'node:fs';
           import { setTimeout } from 'node:timers/promises';
+          import { assertPublishedArtifact } from './scripts/release-metadata.mjs';
           const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
           const verify = async (remaining) => {
             const response = await fetch(`https://registry.npmjs.org/${pkg.name}/${pkg.version}`);
@@ -83,10 +98,7 @@ jobs:
               throw new Error(`Public npm verification failed: HTTP ${response.status}`);
             }
             const published = await response.json();
-            if (published.version !== pkg.version || published.gitHead !== process.env.GITHUB_SHA
-              || Object.keys(published.dependencies ?? {}).length) {
-              throw new Error('Published version, commit or runtime dependencies do not match');
-            }
+            assertPublishedArtifact(published, { ...pkg, integrity: process.env.EXPECTED_INTEGRITY });
             console.log(`Verified ${published.name}@${published.version}: public, zero runtime dependencies`);
           };
           await verify(12);

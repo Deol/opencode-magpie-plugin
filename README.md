@@ -55,7 +55,7 @@ OpenCode V2
 
 ```jsonc
 {
-  "plugins": ["opencode-magpie-plugin@0.1.2"]
+  "plugins": ["opencode-magpie-plugin@0.1.3"]
 }
 ```
 

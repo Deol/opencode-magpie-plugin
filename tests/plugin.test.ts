@@ -112,6 +112,37 @@ describe('Magpie discovery', () => {
     expect(catalog[0].models).toHaveLength(1);
     expect(catalog[0].models[0].enabled).toBe(false);
     expect(catalog[0].models[0].cost).toEqual([]);
+    // A model with no price is not free: it stays out of the picker and says why.
+    expect(catalog[0].models[0].name).toBe('unknown-model (价格未知)');
+  });
+
+  it('keeps a routing group selectable when its members cost different amounts', () => {
+    // Magpie reports a group price only when every member costs the same, so a group that routes
+    // between differently priced models — the reason to build an intent-routing group — has no
+    // price at all. It must still be listed, or the group cannot be used from OpenCode.
+    const mixed = {
+      ...row('workbuddy', 'mixed'),
+      id: 'group/mixed',
+      display_name: 'Mixed',
+      owned_by: 'workbuddy',
+    };
+    const same = {
+      ...row('astra', 'flat'),
+      id: 'group/flat',
+      display_name: 'Flat',
+      owned_by: 'astra',
+      magpie_price: { input: 1, output: 2 },
+    };
+    const catalog = buildInventory([mixed, same], 'http://localhost:3425');
+    const magpie = catalog[0];
+    expect(magpie.info.id).toBe('magpie-magpie');
+    expect(magpie.models.map((model) => model.modelID)).toEqual(['group/mixed', 'group/flat']);
+    // An unpriced group is selectable and keeps its own name: its cost is a range, not a number.
+    expect(magpie.models[0].enabled).toBe(true);
+    expect(magpie.models[0].cost).toEqual([]);
+    expect(magpie.models[0].name).toBe('Mixed');
+    // A group Magpie can price keeps taking that price.
+    expect(magpie.models[1].cost[0]).toMatchObject({ input: 1, output: 2 });
   });
 
   it('probes identity and reads the gateway price extension', async () => {

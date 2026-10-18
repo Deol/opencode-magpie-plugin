@@ -55,7 +55,7 @@ OpenCode V2
 
 ```jsonc
 {
-  "plugins": ["opencode-magpie-plugin@0.1.5"]
+  "plugins": ["opencode-magpie-plugin@0.1.6"]
 }
 ```
 
@@ -142,6 +142,12 @@ MAGPIE_ADDR=127.0.0.1:3426 opencode --standalone
 4. 所有来源均没有价格时，不启用该模型，避免把未知价格显示为免费。**路由组例外**：Magpie 只在组内全部成员同价时才给组报价，而路由组每一轮的成员由路由决定，成本本来就是一个区间而不是单一数字。这类组保持可选用、保留自己的名字，只是费用读数不精确。路由分组仍只用 Magpie 报价，不根据 `auto-*` 名称推断成员价格。
 
 models.dev 缓存写入 `$XDG_CACHE_HOME/opencode-magpie-plugin/models.json`（默认 `~/.cache/opencode-magpie-plugin/models.json`）。首次可只读复用 Magpie、OpenCode 的 `models.json`；下载只写插件自己的目录。每次模型刷新检查缓存，超过 24 小时后台更新，缺价时可提前到 6 小时；同进程下载去重且失败后至少间隔 6 小时重试。首次下载和更新不阻塞模型发现，成功后下一次 30 秒刷新采用新目录；离线保留旧缓存。下载源为 `https://models.dev/api.json`，仍然零运行时依赖，目前只采用基础价，未接入阶梯价。
+
+### 0.1.6
+
+- 无报价路由组保持可选并保留原名；OpenCode 对这些请求的费用估算仍为 0，不代表实际免费，实际费用请查看 Magpie 或服务账单。
+- macOS 找到 Magpie app 时优先启动带窗口的网关，解析安装器软链；仅在 app 异常退出时降级到 `serve`，避免慢启动或交接现有 app 时被无窗口进程抢占端口。
+- 内置费率不变，尚未接入按请求实际路由成员计费。
 
 ### 0.1.5
 

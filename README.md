@@ -27,7 +27,7 @@ OpenCode V2
 - 启动时发现目录，每 30 秒刷新；服务新增、模型下线都能反映到 OpenCode。
 - Provider 显示 Magpie 中的分组名称，而不是统一挤在一个 “Magpie” 下；路由分组统一归入 Magpie。
 - 内置独立价格表和模型名归一化逻辑，支持输入、输出、缓存读取与写入价格。
-- Magpie 已安装但未运行时自动执行 `magpie serve`；未安装时给出安装链接。
+- Magpie 已安装但未运行时自动把它拉起来（macOS 上启动的是 Magpie app，因此 Magpie 的路由页照常可用）；未安装时给出安装链接。
 - 登录和服务凭据由 Magpie 管理，插件不需要复制上游 token。
 
 这不是一个绕过 Magpie 的社区插件宿主：**推理请求仍经过本机 Magpie 网关**。
@@ -122,7 +122,7 @@ MAGPIE_ADDR=127.0.0.1:3426 opencode --standalone
 
 `0.0.0.0`、`::` 监听地址会转换为本机访问地址。本版本面向本机网关，不支持远程服务器地址。共享服务模式下，在终端临时设置变量不一定会改变已经启动的 OpenCode 服务环境。
 
-网关不在线时，插件在 PATH、`~/.local/bin`、常见 Homebrew 路径以及 macOS 的 `Magpie.app` 中寻找可执行文件，并后台启动 `magpie serve`。Windows 通过 PATH / `~/.local/bin` 寻找 `magpie.exe`。如果无法找到，请安装 Magpie 或把它加入 OpenCode 服务的 PATH。
+网关不在线时，插件在 PATH、`~/.local/bin`、常见 Homebrew 路径以及 macOS 的 `Magpie.app` 中寻找可执行文件并把它拉起来。找到的是 `Magpie.app` 里的可执行文件时（`~/.local/bin/magpie` 是它的软链，会解析到真实路径），macOS 上启动 Magpie app——它同样提供网关，而且带窗口，路由页可以查看；app 打不开窗口时（例如通过 SSH 登录、或 OpenCode 跑在守护进程里）退回无窗口的 `magpie serve`。其他情况直接用 `serve`。Windows 通过 PATH / `~/.local/bin` 寻找 `magpie.exe`。如果无法找到，请安装 Magpie 或把它加入 OpenCode 服务的 PATH。
 
 启动后会等待网关就绪；请求前和目录刷新时也会检查网关。插件卸载不会关闭已启动的共享网关。若端口被其他服务占用，会报错而不是向其发送模型请求。
 

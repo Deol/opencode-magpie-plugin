@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { constants } from 'node:fs';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -58,7 +58,11 @@ export const findExecutable = async (): Promise<string | undefined> => {
         ),
     ),
   );
-  return found.find(Boolean);
+  const executable = found.find(Boolean);
+  if (!executable) return undefined;
+  // The installer links Magpie.app into ~/.local/bin, and a PATH entry wins over the bundle.
+  // Resolve the link so the caller can tell the app from a standalone CLI before starting it.
+  return await realpath(executable).catch(() => executable);
 };
 
 export const probeGateway = async (baseURL: string): Promise<boolean> => {
@@ -74,19 +78,71 @@ export const probeGateway = async (baseURL: string): Promise<boolean> => {
   return true;
 };
 
-const startGateway = async (executable: string): Promise<void> => {
+/**
+ * How to bring the gateway up when nothing is listening.
+ *
+ * `magpie serve` runs the gateway with no window, and only a window can show Magpie's Routing
+ * view. A windowless gateway that wins the port keeps Magpie's own app from starting one — the
+ * app does not take the port back, it just reports that routing cannot be watched there. On
+ * macOS the bundled executable is the app, which serves the gateway as well and keeps the
+ * Routing view available.
+ *
+ * `--web` is not an option here: it opens a second listener on a fixed port, and when that port
+ * is taken the whole gateway exits instead of just the page.
+ */
+export const gatewayArgs = (executable: string): string[] => {
+  const app = /[\\/]magpie\.app[\\/]/i.test(executable);
+  return process.platform === 'darwin' && app ? ['tray'] : ['serve'];
+};
+
+/**
+ * The commands to try, in order, when nothing is listening.
+ *
+ * The app is preferred on macOS because only it has a window, and a window is what shows the
+ * Routing view. It needs a GUI session, though: a Mac reached over SSH, or one where OpenCode
+ * runs as a daemon, has none, and `magpie tray` then exits without serving. The windowless
+ * gateway has no such requirement, which is why it stays as the fallback rather than being
+ * replaced.
+ */
+export const startAttempts = (executable: string): string[][] => {
+  const preferred = gatewayArgs(executable);
+  return preferred[0] === 'tray' ? [preferred, ['serve']] : [preferred];
+};
+
+const startGateway = async (executable: string, args: string[]): Promise<{ failed: boolean }> => {
+  const state = { failed: false };
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(executable, ['serve'], {
+    const child = spawn(executable, args, {
       detached: true,
       stdio: 'ignore',
       windowsHide: true,
     });
     child.once('error', reject);
+    // A successful exit can mean handoff to an existing app, not startup failure.
+    child.once('exit', (code: number | null, signal: string | null) => {
+      state.failed = (code !== null && code !== 0) || signal != null;
+    });
     child.once('spawn', () => {
       child.unref();
       resolve();
     });
   });
+  return state;
+};
+
+/** Polls until the gateway answers, or gives up after `tries` half-second waits. */
+const waitForGateway = async (
+  baseURL: string,
+  tries: number,
+  state: { failed: boolean },
+): Promise<boolean> => {
+  for (let remaining = tries; remaining >= 0; remaining -= 1) {
+    if (await probeGateway(baseURL)) return true;
+    if (state.failed) return false;
+    if (remaining === 0) return false;
+    await delay(500);
+  }
+  return false;
 };
 
 const starting = new Map<string, Promise<void>>();
@@ -98,14 +154,16 @@ export const ensureGateway = async (baseURL: string): Promise<void> => {
   const task = (async () => {
     const executable = await findExecutable();
     if (!executable) throw new Error(INSTALL_MESSAGE);
-    await startGateway(executable);
-    const wait = async (remaining: number): Promise<void> => {
-      if (await probeGateway(baseURL)) return;
-      if (remaining === 0) throw new Error('Magpie 网关启动超时，请运行 magpie serve 查看错误。');
-      await delay(500);
-      return wait(remaining - 1);
-    };
-    await wait(30);
+    for (const args of startAttempts(executable)) {
+      const state = await startGateway(executable, args);
+      if (await waitForGateway(baseURL, args[0] === 'tray' ? 60 : 30, state)) return;
+      if (args[0] === 'tray' && !state.failed) {
+        throw new Error(
+          'Magpie app 网关尚未就绪，请在 app 中检查网关状态；未启动无窗口服务，以免抢占端口。',
+        );
+      }
+    }
+    throw new Error('Magpie 网关启动超时，请运行 magpie serve 查看错误。');
   })();
   starting.set(baseURL, task);
   try {

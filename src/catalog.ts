@@ -1,7 +1,12 @@
 import { lookupCatalogPrice, type ModelsDevCatalog } from './catalog-cache.js';
 import type { ModelPricingProvider } from './model-pricing.js';
-import { getModelPricing } from './model-pricing.js';
-import { type ModelInfo2, type ProviderInfo, toClassicModelInfo } from './opencode.js';
+import { getModelPricing, resolveModelPricingKey } from './model-pricing.js';
+import {
+  type ModelInfo2,
+  normalizeModelCosts,
+  type ProviderInfo,
+  toClassicModelInfo,
+} from './opencode.js';
 
 export type MagpieModel = {
   id: string;
@@ -22,6 +27,13 @@ export type MagpieModel = {
     output: number;
     cache_read?: number;
     cache_write?: number;
+    tiers?: {
+      above: number;
+      input?: number;
+      output?: number;
+      cache_read?: number;
+      cache_write?: number;
+    }[];
   };
 };
 
@@ -186,11 +198,18 @@ export const buildInventory = (
           ids.has(`${model.id}-fast`)
         )
           return [model];
+        const row = rows.find((row) => row.id === model.modelID);
+        const fastKey = `${model.id.replace(/@\d+(?:k|m)$/i, '')}-fast`;
+        const fastPrice =
+          row && !row.id.startsWith('group/') && resolveModelPricingKey(fastKey)?.endsWith('-fast')
+            ? getModelPricing(fastKey, pricingProvider(row.owned_by))
+            : undefined;
         return [
           model,
           {
             ...model,
             id: `${model.id}-fast`,
+            cost: fastPrice ? normalizeModelCosts(fastPrice) : model.cost,
             name: `${model.name.replace(/ \(价格未知\)$/, '')} Fast${model.enabled ? '' : ' (价格未知)'}`,
             body: { ...model.body, service_tier: 'priority' },
           },

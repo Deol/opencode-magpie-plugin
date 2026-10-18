@@ -36,6 +36,7 @@ describe('Fast model discovery', () => {
       ...normal,
       id: 'composer-2.5-fast',
       name: 'Composer 2.5 Fast',
+      cost: [{ input: 2.73, output: 13.23, cache: { read: 0.76, write: 0 } }],
       body: { service_tier: 'priority' },
     });
     expect(fast.modelID).toBe('cursor/composer-2.5');

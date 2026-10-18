@@ -29,6 +29,7 @@ export type ModelInfo2 = {
     input: number;
     output: number;
     cache: { read: number; write: number };
+    tier?: { type: 'context'; size: number };
   }[];
   package?: string;
   settings?: Record<string, unknown>;
@@ -100,6 +101,7 @@ export const normalizeModelCosts = (cost: unknown): ModelInfo2['cost'] => {
     cache?: { read?: number; write?: number };
     cache_read?: number;
     cache_write?: number;
+    tiers?: unknown[];
   };
   if (
     typeof value.input !== 'number' ||
@@ -108,16 +110,39 @@ export const normalizeModelCosts = (cost: unknown): ModelInfo2['cost'] => {
     !Number.isFinite(value.output)
   )
     return [];
-  return [
-    {
-      input: value.input,
-      output: value.output,
-      cache: {
-        read: value.cache?.read ?? value.cache_read ?? 0,
-        write: value.cache?.write ?? value.cache_write ?? 0,
-      },
+  const base = {
+    input: value.input,
+    output: value.output,
+    cache: {
+      read: value.cache?.read ?? value.cache_read ?? 0,
+      write: value.cache?.write ?? value.cache_write ?? 0,
     },
-  ];
+  };
+  const valid = (rate: unknown): rate is number =>
+    typeof rate === 'number' && Number.isFinite(rate) && rate >= 0;
+  if (![base.input, base.output, base.cache.read, base.cache.write].every(valid)) return [];
+  const result: Array<ModelInfo2['cost'][number]> = [base];
+  for (const raw of Array.isArray(value.tiers) ? value.tiers : []) {
+    if (!raw || typeof raw !== 'object') continue;
+    const entry = raw as typeof value & { above?: number; tier?: { type?: string; size?: number } };
+    const size = entry.tier
+      ? entry.tier.type === 'context'
+        ? entry.tier.size
+        : undefined
+      : entry.above;
+    if (!valid(size) || !Number.isInteger(size)) continue;
+    const rates = {
+      input: entry.input ?? base.input,
+      output: entry.output ?? base.output,
+      cache: {
+        read: entry.cache?.read ?? entry.cache_read ?? base.cache.read,
+        write: entry.cache?.write ?? entry.cache_write ?? base.cache.write,
+      },
+    };
+    if (![rates.input, rates.output, rates.cache.read, rates.cache.write].every(valid)) continue;
+    result.push({ ...rates, tier: { type: 'context', size } });
+  }
+  return result;
 };
 
 export const toClassicModelInfo = (

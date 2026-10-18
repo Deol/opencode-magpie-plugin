@@ -93,7 +93,7 @@ Routing group（例如 `group/auto`）会跨多个服务路由，因此不按 `o
 
 支持 Fast 的模型会额外显示一个 `-fast` 模型，例如 `composer-2.5` / `composer-2.5-fast`，显示名为 `Composer 2.5` / `Composer 2.5 Fast`。选择 Fast 后仍向 Magpie 发送原模型 ID，同时附带 `service_tier: "priority"`，并保留原有思考档位。检测依据是 `/v1/models` 的 `service_tiers` 包含 `priority`；旧网关漏报时，补读本机 Magpie 配置目录的 `plugin-providers.json` 中 Cursor 的 `fast: true` 或插件的 `serviceTiers`。仅扩展网关当前列出的模型，已有同名 `-fast` 模型优先，刷新时同步增删。
 
-Fast 模型暂沿用原模型的参考单价，不代表 Fast 实际费率；实际加价以 Magpie 或服务账单为准。缺少原模型报价时仍按未知价格处理。
+Fast 模型优先采用内置表中明确登记的 Fast 费率及上下文档位；没有独立 Fast 费率时仍沿用原模型参考价，不代表 Fast 实际费率。缺少原模型报价时仍按未知价格处理。
 
 根据 `native_endpoints` 选择 OpenCode 内置 runtime：
 
@@ -145,7 +145,14 @@ MAGPIE_ADDR=127.0.0.1:3426 opencode --standalone
 3. 普通模型仍缺价时，查询 models.dev 本地缓存：优先同 provider 的精确 ID，再查已识别厂商（OpenAI、Anthropic、DeepSeek、Google、xAI）的精确 ID 或 `canonical_model_id`。不跨版本猜价、不采用其他转售商报价、不使用订阅 plan 目录的零价。
 4. 所有来源均没有价格时，不启用该模型，避免把未知价格显示为免费。**路由组例外**：Magpie 只在组内全部成员同价时才给组报价，而路由组每一轮的成员由路由决定，成本本来就是一个区间而不是单一数字。这类组保持可选用、保留自己的名字，只是费用读数不精确。路由分组仍只用 Magpie 报价，不根据 `auto-*` 名称推断成员价格。
 
-models.dev 缓存写入 `$XDG_CACHE_HOME/opencode-magpie-plugin/models.json`（默认 `~/.cache/opencode-magpie-plugin/models.json`）。首次可只读复用 Magpie、OpenCode 的 `models.json`；下载只写插件自己的目录。每次模型刷新检查缓存，超过 24 小时后台更新，缺价时可提前到 6 小时；同进程下载去重且失败后至少间隔 6 小时重试。首次下载和更新不阻塞模型发现，成功后下一次 30 秒刷新采用新目录；离线保留旧缓存。下载源为 `https://models.dev/api.json`，仍然零运行时依赖，目前只采用基础价，未接入阶梯价。
+models.dev 缓存写入 `$XDG_CACHE_HOME/opencode-magpie-plugin/models.json`（默认 `~/.cache/opencode-magpie-plugin/models.json`）。首次可只读复用 Magpie、OpenCode 的 `models.json`；下载只写插件自己的目录。每次模型刷新检查缓存，超过 24 小时后台更新，缺价时可提前到 6 小时；同进程下载去重且失败后至少间隔 6 小时重试。首次下载和更新不阻塞模型发现，成功后下一次 30 秒刷新采用新目录；离线保留旧缓存。下载源为 `https://models.dev/api.json`，仍然零运行时依赖，基础价和 context 阶梯价一并传给 OpenCode。
+
+### 0.1.8
+
+- 修复上下文阶梯价丢失：保留内置表、models.dev 的 `tier.type=context` 与 Magpie 的 `above` 分档，交给 OpenCode 根据单次输入（含缓存）选择整单费率。
+- GPT-6 Astra 标准价为输入/输出/缓存读/缓存写 `$10/$50/$1/$12.5`，超过 272K 输入后为 `$20/$75/$2/$25`；Fast 两档均为标准价的两倍。单位为美元/百万 token。
+- 同步补齐 GPT-6 Sol、GPT-6 Luna、GPT-6.1 Sol 的 Standard/Fast 长上下文分档；GPT-6.1 Sol 独立使用 `$0.10` 缓存读取价，不再回退到旧 Sol 的 `$0.20`。依据 [OpenAI 官方价格表](https://developers.openai.com/api/docs/pricing)（2026-10-18）。
+- 自动派生 Fast 模型优先使用已登记的独立 Fast 价格；保留 provider 覆盖、未知价格及路由组原有策略。
 
 ### 0.1.7
 
@@ -168,7 +175,7 @@ Cursor 使用 `cursor` 覆盖，WorkBuddy 使用 `codebuddy` 覆盖；其他已�
 所有价格单位都是 **美元 / 百万 token**。OpenCode 用这些单价计算请求费用。普通计费的概念公式为：
 
 ```text
-费用 = (非缓存输入 × input + 输出 × output
+费用 = (非缓存输入 × input + (可见输出 + 推理) × output
       + 缓存读取 × cache.read + 缓存写入 × cache.write) / 1,000,000
 ```
 
@@ -180,7 +187,7 @@ Cursor 使用 `cursor` 覆盖，WorkBuddy 使用 `codebuddy` 覆盖；其他已�
 - Magpie 用户自定义价格不会覆盖已命中的内置价格表。
 - Routing group 可能动态切换成员，目录价格不保证等于实际被选成员的价格。
 - Cursor 等服务的 `usage.magpie_deferred` 是迟到用量，Magpie 会补记到账本；OpenCode 原生 runtime 不会因此修改历史费用。
-- 当前价格映射不支持 Magpie 的上下文阶梯价和独立的一小时缓存写入价。
+- 当前价格映射仍不支持 Magpie 独立的一小时缓存写入价。
 
 因此，OpenCode 费用适合观察 token 成本，**不能承诺与 Magpie 或订阅服务最终账单完全一致**。
 

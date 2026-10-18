@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { type ModelInfo2, normalizeModelCosts } from './opencode.js';
 
 /**
  * models.dev catalog, read the way Magpie reads it.
@@ -182,6 +183,7 @@ export type CatalogPrice = {
   input: number;
   output: number;
   cache: { read: number; write: number };
+  tiers?: Array<ModelInfo2['cost'][number]>;
 };
 
 export const catalogPrice = (cost: CatalogCost | undefined): CatalogPrice | undefined => {
@@ -192,11 +194,8 @@ export const catalogPrice = (cost: CatalogCost | undefined): CatalogPrice | unde
     )
   )
     return undefined;
-  return {
-    input: cost.input,
-    output: cost.output,
-    cache: { read: cost.cache_read ?? 0, write: cost.cache_write ?? 0 },
-  };
+  const [base, ...tiers] = normalizeModelCosts(cost);
+  return { ...base, ...(tiers.length ? { tiers } : {}) };
 };
 
 /**

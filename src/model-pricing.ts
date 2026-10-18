@@ -12,6 +12,7 @@ export interface ModelPricing {
     read?: number;
     write?: number;
   };
+  tiers?: (Omit<ModelPricing, 'tiers'> & { tier: { type: 'context'; size: number } })[];
 }
 
 export type ModelPricingProvider = 'astra' | 'boxai' | 'codebuddy' | 'cursor' | 'imate' | 'kalm';
@@ -69,6 +70,7 @@ const MODEL_PRICING_ALIASES: Record<string, string> = {
   'gpt-5-6-sol': 'gpt-5.6-sol',
   'gpt-5-6-terra': 'gpt-5.6-terra',
   'gpt-5-6-luna': 'gpt-5.6-luna',
+  'gpt-6-1-sol': 'gpt-6.1-sol',
   'hy3-ioa': 'hy-3',
   hy3: 'hy-3',
   'hy-4-preview': 'hy4-preview',
@@ -330,20 +332,128 @@ const MODEL_PRICINGS: Record<string, ModelPricingEntry> = {
   },
   'gpt-6-astra': {
     // OpenAI 2026-09-03 发布；>272K 长上下文整单按 $20/$75 计。
-    default: { input: 10, output: 50, cache: { read: 1, write: 12.5 } },
+    default: {
+      input: 10,
+      output: 50,
+      cache: { read: 1, write: 12.5 },
+      tiers: [
+        {
+          input: 20,
+          output: 75,
+          cache: { read: 2, write: 25 },
+          tier: { type: 'context', size: 272000 },
+        },
+      ],
+    },
   },
   'gpt-6-astra-fast': {
-    default: { input: 20, output: 100, cache: { read: 2, write: 25 } },
+    default: {
+      input: 20,
+      output: 100,
+      cache: { read: 2, write: 25 },
+      tiers: [
+        {
+          input: 40,
+          output: 150,
+          cache: { read: 4, write: 50 },
+          tier: { type: 'context', size: 272000 },
+        },
+      ],
+    },
   },
   // OpenAI 官方价：上线 $4/$20、$0.2/$1.2，2026-09 降 50% 后 $2/$10、$0.1/$0.5
   // （openai.com/index/introducing-gpt-6-sol-and-luna；developers.openai.com 定价页）。
   'gpt-6-sol': {
     // 网关额度倍率 x1.33
-    default: { input: 2, output: 10, cache: { read: 0.2, write: 2.5 } },
+    default: {
+      input: 2,
+      output: 10,
+      cache: { read: 0.2, write: 2.5 },
+      tiers: [
+        {
+          input: 4,
+          output: 15,
+          cache: { read: 0.4, write: 5 },
+          tier: { type: 'context', size: 272000 },
+        },
+      ],
+    },
+  },
+  'gpt-6-sol-fast': {
+    default: {
+      input: 4,
+      output: 20,
+      cache: { read: 0.4, write: 5 },
+      tiers: [
+        {
+          input: 8,
+          output: 30,
+          cache: { read: 0.8, write: 10 },
+          tier: { type: 'context', size: 272000 },
+        },
+      ],
+    },
   },
   'gpt-6-luna': {
     // 网关额度倍率 x0.07
-    default: { input: 0.1, output: 0.5, cache: { read: 0.01, write: 0.125 } },
+    default: {
+      input: 0.1,
+      output: 0.5,
+      cache: { read: 0.01, write: 0.125 },
+      tiers: [
+        {
+          input: 0.2,
+          output: 0.75,
+          cache: { read: 0.02, write: 0.25 },
+          tier: { type: 'context', size: 272000 },
+        },
+      ],
+    },
+  },
+  'gpt-6-luna-fast': {
+    default: {
+      input: 0.2,
+      output: 1,
+      cache: { read: 0.02, write: 0.25 },
+      tiers: [
+        {
+          input: 0.4,
+          output: 1.5,
+          cache: { read: 0.04, write: 0.5 },
+          tier: { type: 'context', size: 272000 },
+        },
+      ],
+    },
+  },
+  'gpt-6.1-sol': {
+    default: {
+      input: 2,
+      output: 10,
+      cache: { read: 0.1, write: 2.5 },
+      tiers: [
+        {
+          input: 4,
+          output: 15,
+          cache: { read: 0.2, write: 5 },
+          tier: { type: 'context', size: 272000 },
+        },
+      ],
+    },
+  },
+  'gpt-6.1-sol-fast': {
+    default: {
+      input: 4,
+      output: 20,
+      cache: { read: 0.2, write: 5 },
+      tiers: [
+        {
+          input: 8,
+          output: 30,
+          cache: { read: 0.4, write: 10 },
+          tier: { type: 'context', size: 272000 },
+        },
+      ],
+    },
   },
   'gpt-5.5': {
     default: { input: 5, output: 30, cache: { read: 0.5 } },
@@ -412,6 +522,9 @@ const clonePricing = (pricing: ModelPricing): ModelPricing => ({
   input: pricing.input,
   output: pricing.output,
   ...(pricing.cache ? { cache: { ...pricing.cache } } : {}),
+  ...(pricing.tiers
+    ? { tiers: pricing.tiers.map((entry) => ({ ...clonePricing(entry), tier: { ...entry.tier } })) }
+    : {}),
 });
 
 type VersionedModelKey = {

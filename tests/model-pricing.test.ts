@@ -63,11 +63,27 @@ describe('getModelPricing', () => {
       input: 2,
       output: 10,
       cache: { read: 0.2, write: 2.5 },
+      tiers: [
+        {
+          input: 4,
+          output: 15,
+          cache: { read: 0.4, write: 5 },
+          tier: { type: 'context', size: 272000 },
+        },
+      ],
     });
     expect(getModelPricing('gpt-6-luna', 'codebuddy')).toEqual({
       input: 0.1,
       output: 0.5,
       cache: { read: 0.01, write: 0.125 },
+      tiers: [
+        {
+          input: 0.2,
+          output: 0.75,
+          cache: { read: 0.02, write: 0.25 },
+          tier: { type: 'context', size: 272000 },
+        },
+      ],
     });
   });
 
@@ -118,6 +134,14 @@ describe('getModelPricing', () => {
       input: 10,
       output: 50,
       cache: { read: 1, write: 12.5 },
+      tiers: [
+        {
+          input: 20,
+          output: 75,
+          cache: { read: 2, write: 25 },
+          tier: { type: 'context', size: 272000 },
+        },
+      ],
     });
   });
 

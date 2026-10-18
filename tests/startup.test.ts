@@ -1,18 +1,39 @@
 import { EventEmitter } from 'node:events';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ access: vi.fn(), spawn: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  access: vi.fn(),
+  spawn: vi.fn(),
+  realpath: vi.fn(),
+  delay: vi.fn(),
+}));
 vi.mock('node:fs/promises', async (original) => ({
   ...(await original<typeof import('node:fs/promises')>()),
   access: mocks.access,
   readFile: vi.fn(),
+  realpath: mocks.realpath,
 }));
 vi.mock('node:child_process', () => ({ spawn: mocks.spawn }));
+vi.mock('node:timers/promises', () => ({ setTimeout: mocks.delay }));
 
-import { ensureGateway, gatewayArgs, INSTALL_MESSAGE, startAttempts } from '../src/gateway.js';
+import {
+  ensureGateway,
+  findExecutable,
+  gatewayArgs,
+  INSTALL_MESSAGE,
+  startAttempts,
+} from '../src/gateway.js';
+
+const platform = process.platform;
+beforeEach(() => {
+  mocks.realpath.mockImplementation(async (path) => path);
+  vi.stubEnv('PATH', '/test-bin');
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+  Object.defineProperty(process, 'platform', { value: platform, configurable: true });
   vi.resetAllMocks();
 });
 
@@ -96,4 +117,68 @@ it('propagates a spawn failure and allows a later retry', async () => {
   await expect(ensureGateway('http://127.0.0.1:3425')).rejects.toThrow('EACCES');
   await expect(ensureGateway('http://127.0.0.1:3425')).rejects.toThrow('EACCES');
   expect(mocks.spawn).toHaveBeenCalledTimes(2);
+});
+
+it('resolves a PATH symlink to the app bundle before selecting tray', async () => {
+  Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+  mocks.access.mockResolvedValue(undefined);
+  mocks.realpath.mockResolvedValue('/Applications/Magpie.app/Contents/MacOS/magpie');
+  expect(gatewayArgs((await findExecutable()) ?? '')).toEqual(['tray']);
+  expect(mocks.realpath).toHaveBeenCalledWith('/test-bin/magpie');
+});
+
+it.each([
+  'slow',
+  'handoff',
+  'failed',
+] as const)('handles an app that is %s without racing the windowed gateway', async (mode) => {
+  Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+  mocks.access.mockResolvedValue(undefined);
+  mocks.realpath.mockResolvedValue('/Applications/Magpie.app/Contents/MacOS/magpie');
+  let running = false;
+  let waits = 0;
+  mocks.delay.mockImplementation(async () => {
+    waits += 1;
+    if (mode === 'slow' && waits === 40) running = true;
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      if (!running) throw new TypeError('connection refused');
+      return Response.json({ name: 'magpie' });
+    }),
+  );
+  mocks.spawn.mockImplementation((_executable, args: string[]) => {
+    const child = Object.assign(new EventEmitter(), { unref: vi.fn() });
+    queueMicrotask(() => {
+      child.emit('spawn');
+      if (args[0] === 'serve') running = true;
+      else if (mode === 'failed') child.emit('exit', 1, null);
+      else if (mode === 'handoff') child.emit('exit', 0, null);
+    });
+    return child;
+  });
+  if (mode === 'handoff') {
+    await expect(ensureGateway('http://127.0.0.1:3425')).rejects.toThrow('未启动无窗口服务');
+  } else {
+    await ensureGateway('http://127.0.0.1:3425');
+  }
+  expect(mocks.spawn.mock.calls.map((call) => call[1])).toEqual(
+    mode === 'failed' ? [['tray'], ['serve']] : [['tray']],
+  );
+  if (mode === 'failed') expect(waits).toBe(0);
+});
+
+it('does not start serve when a live app times out', async () => {
+  Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+  mocks.access.mockResolvedValue(undefined);
+  mocks.realpath.mockResolvedValue('/Applications/Magpie.app/Contents/MacOS/magpie');
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('connection refused')));
+  mocks.spawn.mockImplementation(() => {
+    const child = Object.assign(new EventEmitter(), { unref: vi.fn() });
+    queueMicrotask(() => child.emit('spawn'));
+    return child;
+  });
+  await expect(ensureGateway('http://127.0.0.1:3425')).rejects.toThrow('未启动无窗口服务');
+  expect(mocks.spawn).toHaveBeenCalledTimes(1);
 });

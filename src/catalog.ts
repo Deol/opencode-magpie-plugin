@@ -14,6 +14,7 @@ export type MagpieModel = {
   reasoning?: boolean;
   reasoning_levels?: string[];
   supported_reasoning_levels?: (string | { effort: string })[];
+  service_tiers?: (string | { id: string })[];
   modalities?: { input?: string[]; output?: string[] };
   kind?: string;
   magpie_price?: {
@@ -80,6 +81,7 @@ export type PriceSource = 'builtin' | 'magpie' | 'models.dev' | 'none';
 export type InventoryOptions = {
   /** The cached models.dev catalog, for models neither the built-in table nor Magpie prices. */
   catalog?: ModelsDevCatalog;
+  fastModelIDs?: ReadonlySet<string>;
 };
 
 const modelCost = (
@@ -103,6 +105,13 @@ export const buildInventory = (
   options: InventoryOptions = {},
 ): Inventory => {
   const providers = new Map<string, Inventory[number]>();
+  const fastModelIDs = new Set(options.fastModelIDs);
+  for (const row of rows) {
+    if (
+      row.service_tiers?.some((tier) => (typeof tier === 'string' ? tier : tier.id) === 'priority')
+    )
+      fastModelIDs.add(row.id);
+  }
   rows
     .filter((row) => !row.kind && row.id.includes('/'))
     .forEach((row) => {
@@ -166,5 +175,27 @@ export const buildInventory = (
       if (!entry.models.some((existing) => existing.id === model.id)) entry.models.push(model);
       providers.set(providerID, entry);
     });
-  return [...providers.values()];
+  return [...providers.values()].map((entry) => {
+    const ids = new Set(entry.models.map((model) => model.id));
+    return {
+      ...entry,
+      models: entry.models.flatMap((model) => {
+        if (
+          !fastModelIDs.has(model.modelID) ||
+          /-fast(?:@\d+[km])?$/i.test(model.id) ||
+          ids.has(`${model.id}-fast`)
+        )
+          return [model];
+        return [
+          model,
+          {
+            ...model,
+            id: `${model.id}-fast`,
+            name: `${model.name.replace(/ \(价格未知\)$/, '')} Fast${model.enabled ? '' : ' (价格未知)'}`,
+            body: { ...model.body, service_tier: 'priority' },
+          },
+        ];
+      }),
+    };
+  });
 };

@@ -55,7 +55,7 @@ OpenCode V2
 
 ```jsonc
 {
-  "plugins": ["opencode-magpie-plugin@0.1.6"]
+  "plugins": ["opencode-magpie-plugin@0.1.7"]
 }
 ```
 
@@ -90,6 +90,10 @@ Routing group（例如 `group/auto`）会跨多个服务路由，因此不按 `o
 目录映射保留模型的上下文窗口、最大输出、输入输出模态和 reasoning 档位。仅发现聊天目录；重复的无 provider 前缀别名、图片生成或其他非聊天专用模型不会注册为聊天模型。
 
 思考强度读取新版 `reasoning_levels`，并兼容已安装版本常见的 `supported_reasoning_levels`（`{ effort }` 对象或字符串列表）。只有网关实际声明的档位才会出现，可在 OpenCode 的模型变体控件中选择，或使用 `provider/model#high` 这样的引用。`default` 保留服务默认行为，不额外生成档位；网关未提供档位时不会凭模型名称猜测。
+
+支持 Fast 的模型会额外显示一个 `-fast` 模型，例如 `composer-2.5` / `composer-2.5-fast`，显示名为 `Composer 2.5` / `Composer 2.5 Fast`。选择 Fast 后仍向 Magpie 发送原模型 ID，同时附带 `service_tier: "priority"`，并保留原有思考档位。检测依据是 `/v1/models` 的 `service_tiers` 包含 `priority`；旧网关漏报时，补读本机 Magpie 配置目录的 `plugin-providers.json` 中 Cursor 的 `fast: true` 或插件的 `serviceTiers`。仅扩展网关当前列出的模型，已有同名 `-fast` 模型优先，刷新时同步增删。
+
+Fast 模型暂沿用原模型的参考单价，不代表 Fast 实际费率；实际加价以 Magpie 或服务账单为准。缺少原模型报价时仍按未知价格处理。
 
 根据 `native_endpoints` 选择 OpenCode 内置 runtime：
 
@@ -142,6 +146,12 @@ MAGPIE_ADDR=127.0.0.1:3426 opencode --standalone
 4. 所有来源均没有价格时，不启用该模型，避免把未知价格显示为免费。**路由组例外**：Magpie 只在组内全部成员同价时才给组报价，而路由组每一轮的成员由路由决定，成本本来就是一个区间而不是单一数字。这类组保持可选用、保留自己的名字，只是费用读数不精确。路由分组仍只用 Magpie 报价，不根据 `auto-*` 名称推断成员价格。
 
 models.dev 缓存写入 `$XDG_CACHE_HOME/opencode-magpie-plugin/models.json`（默认 `~/.cache/opencode-magpie-plugin/models.json`）。首次可只读复用 Magpie、OpenCode 的 `models.json`；下载只写插件自己的目录。每次模型刷新检查缓存，超过 24 小时后台更新，缺价时可提前到 6 小时；同进程下载去重且失败后至少间隔 6 小时重试。首次下载和更新不阻塞模型发现，成功后下一次 30 秒刷新采用新目录；离线保留旧缓存。下载源为 `https://models.dev/api.json`，仍然零运行时依赖，目前只采用基础价，未接入阶梯价。
+
+### 0.1.7
+
+- 根据模型声明的 Fast 能力自动派生 `-fast` 模型，使用原模型 ID 加 `service_tier: "priority"` 路由，并保留思考档位。
+- 兼容旧网关未透出的本地插件 Fast 元数据；已有同名模型优先，目录刷新同步增删。
+- 内置费率不变；派生 Fast 模型沿用原模型参考价，尚未接入独立 Fast 费率。
 
 ### 0.1.6
 

@@ -1,5 +1,6 @@
 import { buildInventory, hasUnpricedModel } from './catalog.js';
 import { type CatalogCache, loadCatalogCache } from './catalog-cache.js';
+import { loadFastModelIDs } from './fast-models.js';
 import { ensureGateway, fetchModels, resolveBaseURL } from './gateway.js';
 import { createTrackedSetup, type Plugin2, reloadProviderCatalog } from './opencode.js';
 
@@ -13,7 +14,10 @@ export const setupPlugin: Plugin2['setup'] = async (ctx) => {
   const baseURL = await resolveBaseURL();
   await ensureGateway(baseURL);
   let catalog: CatalogCache = await loadCatalogCache();
-  let inventory = buildInventory(await fetchModels(baseURL), baseURL, { catalog: catalog.data });
+  let inventory = buildInventory(await fetchModels(baseURL), baseURL, {
+    catalog: catalog.data,
+    fastModelIDs: await loadFastModelIDs(),
+  });
   const { track, cleanup } = createTrackedSetup();
   let disposed = false;
   let refreshing = false;
@@ -60,7 +64,10 @@ export const setupPlugin: Plugin2['setup'] = async (ctx) => {
       await ensureGateway(baseURL);
       const rows = await fetchModels(baseURL);
       catalog = await loadCatalogCache(hasUnpricedModel(inventory));
-      const next = buildInventory(rows, baseURL, { catalog: catalog.data });
+      const next = buildInventory(rows, baseURL, {
+        catalog: catalog.data,
+        fastModelIDs: await loadFastModelIDs(),
+      });
       await apply(next);
     } catch (error) {
       console.warn(

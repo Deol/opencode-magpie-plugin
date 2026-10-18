@@ -32,6 +32,7 @@ export type ModelInfo2 = {
   }[];
   package?: string;
   settings?: Record<string, unknown>;
+  body?: Record<string, unknown>;
 };
 
 export type ProviderEditor = {

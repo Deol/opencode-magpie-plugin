@@ -7,6 +7,8 @@ import plugin from '../src/index.js';
 import { getRequiredModelPricing } from '../src/model-pricing.js';
 import type { PluginContext, ProviderEditor } from '../src/opencode.js';
 
+vi.mock('../src/fast-models.js', () => ({ loadFastModelIDs: async () => new Set() }));
+
 vi.mock('../src/catalog-cache.js', async (original) => ({
   ...(await original<typeof import('../src/catalog-cache.js')>()),
   loadCatalogCache: async () => ({ data: undefined, path: '', stale: false }),

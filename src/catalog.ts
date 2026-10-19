@@ -145,14 +145,9 @@ export const buildInventory = (
         modalities: row.modalities,
         tool_call: true,
       });
-      // An unknown price must not silently look like a free model: say so, and leave it out.
-      // A routing group is the exception. Magpie reports a group price only when every member
-      // costs the same, so a group that routes between differently priced models has no single
-      // price to report — that is how the group is meant to work, not a discovery failure. It has
-      // to stay selectable all the same, or routing across differently priced models, which is
-      // the reason to build a group, would be impossible to use.
-      if (!cost && !group) model.name += ' (价格未知)';
-      model.enabled = !!cost || group;
+      // A missing price is not a reason to hide the model. Leave cost empty so it is not
+      // reported as free, and keep it selectable. Routing groups often have no single price
+      // because members differ; they stay listed the same way.
       const anthropic = row.native_endpoints?.includes('/v1/messages');
       const responses = !anthropic && row.native_endpoints?.includes('/v1/responses');
       model.package = anthropic
@@ -210,7 +205,7 @@ export const buildInventory = (
             ...model,
             id: `${model.id}-fast`,
             cost: fastPrice ? normalizeModelCosts(fastPrice) : model.cost,
-            name: `${model.name.replace(/ \(价格未知\)$/, '')} Fast${model.enabled ? '' : ' (价格未知)'}`,
+            name: `${model.name} Fast`,
             body: { ...model.body, service_tier: 'priority' },
           },
         ];

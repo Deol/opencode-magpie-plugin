@@ -69,7 +69,7 @@ describe('Fast model discovery', () => {
     }
   });
 
-  it('preserves context SKUs and keeps unknown prices disabled', () => {
+  it('preserves context SKUs and lists unknown prices without a cost', () => {
     const model = {
       ...row,
       id: 'other/unknown@200k',
@@ -82,8 +82,8 @@ describe('Fast model discovery', () => {
     expect(fast).toMatchObject({
       id: 'unknown@200k-fast',
       modelID: model.id,
-      name: 'Unknown Fast (价格未知)',
-      enabled: false,
+      name: 'Unknown Fast',
+      enabled: true,
       cost: [],
     });
   });

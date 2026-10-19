@@ -142,10 +142,15 @@ MAGPIE_ADDR=127.0.0.1:3426 opencode --standalone
 
 1. 内置价格表，优先应用已识别 provider 的专属覆盖。
 2. 内置表未覆盖时，使用 Magpie 返回的 `magpie_price`。
-3. 普通模型仍缺价时，查询 models.dev 本地缓存：优先同 provider 的精确 ID，再查已识别厂商（OpenAI、Anthropic、DeepSeek、Google、xAI）的精确 ID 或 `canonical_model_id`。不跨版本猜价、不采用其他转售商报价、不使用订阅 plan 目录的零价。
-4. 所有来源均没有价格时，不启用该模型，避免把未知价格显示为免费。**路由组例外**：Magpie 只在组内全部成员同价时才给组报价，而路由组每一轮的成员由路由决定，成本本来就是一个区间而不是单一数字。这类组保持可选用、保留自己的名字，只是费用读数不精确。路由分组仍只用 Magpie 报价，不根据 `auto-*` 名称推断成员价格。
+3. 普通模型仍缺价时，查询 models.dev 本地缓存：优先同 provider 的精确 ID，再查已识别厂商（OpenAI、Anthropic、DeepSeek、Google、xAI、Meta）的精确 ID 或 `canonical_model_id`。不跨版本猜价、不采用其他转售商报价、不使用订阅 plan 目录的零价。
+4. 所有来源均没有价格时，模型仍然列出、仍然可选，只是不填 `cost`。空费用不是 0 元，OpenCode 不会把它当成免费；实际费用以 Magpie 或服务账单为准。**路由组**同样如此：Magpie 只在组内全部成员同价时才给组报价，而路由组每一轮的成员由路由决定，成本本来就是一个区间而不是单一数字。路由分组仍只用 Magpie 报价，不根据 `auto-*` 名称推断成员价格。
 
 models.dev 缓存写入 `$XDG_CACHE_HOME/opencode-magpie-plugin/models.json`（默认 `~/.cache/opencode-magpie-plugin/models.json`）。首次可只读复用 Magpie、OpenCode 的 `models.json`；下载只写插件自己的目录。每次模型刷新检查缓存，超过 24 小时后台更新，缺价时可提前到 6 小时；同进程下载去重且失败后至少间隔 6 小时重试。首次下载和更新不阻塞模型发现，成功后下一次 30 秒刷新采用新目录；离线保留旧缓存。下载源为 `https://models.dev/api.json`，仍然零运行时依赖，基础价和 context 阶梯价一并传给 OpenCode。
+
+### 0.1.9
+
+- 缺价模型不再从选择器里拿掉：仍然列出、仍然可选，只是不填 `cost`。空费用不是 0 元，也不代表实际免费。
+- `muse-*` 在 Magpie 未报价时，回退到 models.dev 的 Meta 官方价，不采用转售商报价。Muse Wonder 1.0 为输入/输出/缓存读 `$4/$20/$0.20`，Muse Spark 1.3 为 `$1.25/$4.25/$0.15`。单位为美元/百万 token。这是 Meta 标价，不是 Cursor 账单价。
 
 ### 0.1.8
 

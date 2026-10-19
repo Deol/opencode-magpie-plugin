@@ -102,7 +102,7 @@ describe('Magpie discovery', () => {
     expect(result.variants[0].id).toBe('high');
   });
 
-  it('does not mistake unknown pricing for free and ignores bare aliases and non-chat models', () => {
+  it('lists an unpriced model without a cost and ignores bare aliases and non-chat models', () => {
     const catalog = buildInventory(
       [
         row('cursor', 'unknown-model'),
@@ -112,10 +112,9 @@ describe('Magpie discovery', () => {
       'http://localhost:3425',
     );
     expect(catalog[0].models).toHaveLength(1);
-    expect(catalog[0].models[0].enabled).toBe(false);
+    expect(catalog[0].models[0].enabled).toBe(true);
     expect(catalog[0].models[0].cost).toEqual([]);
-    // A model with no price is not free: it stays out of the picker and says why.
-    expect(catalog[0].models[0].name).toBe('unknown-model (价格未知)');
+    expect(catalog[0].models[0].name).toBe('unknown-model');
   });
 
   it('keeps a routing group selectable when its members cost different amounts', () => {

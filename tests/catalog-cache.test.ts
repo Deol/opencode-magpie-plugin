@@ -117,6 +117,43 @@ describe('models.dev price catalog', () => {
     expect(lookupCatalogPrice(catalog, 'unknown', 'deepseek-v4.1-flash')?.input).toBe(0.15);
   });
 
+  it('prices Cursor Muse models from Meta list prices when Magpie has none', () => {
+    const priced = {
+      ...catalog,
+      meta: {
+        models: {
+          'muse-wonder-1.0': {
+            id: 'muse-wonder-1.0',
+            cost: { input: 4, output: 20, cache_read: 0.2 },
+          },
+          'muse-spark-1.3': {
+            id: 'muse-spark-1.3',
+            cost: { input: 1.25, output: 4.25, cache_read: 0.15 },
+          },
+        },
+      },
+      vercel: {
+        models: {
+          'muse-wonder-1.0': { id: 'muse-wonder-1.0', cost: { input: 9, output: 99 } },
+        },
+      },
+    };
+    expect(lookupCatalogPrice(priced, 'cursor', 'muse-wonder-1.0@300k')).toEqual({
+      input: 4,
+      output: 20,
+      cache: { read: 0.2, write: 0 },
+    });
+    const models = buildInventory(
+      [row('cursor', 'muse-wonder-1.0@300k'), row('cursor', 'muse-spark-1.3@1m')],
+      'http://localhost:3425',
+      { catalog: priced },
+    )[0].models;
+    expect(models.map((model) => [model.id, model.enabled, model.cost[0]?.input])).toEqual([
+      ['muse-wonder-1.0@300k', true, 4],
+      ['muse-spark-1.3@1m', true, 1.25],
+    ]);
+  });
+
   it('does not guess across versions or names', () => {
     expect(lookupCatalogPrice(catalog, 'deepseek', 'deepseek-v5')).toBeUndefined();
     expect(lookupCatalogPrice(undefined, 'deepseek', 'deepseek-flash')).toBeUndefined();

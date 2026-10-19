@@ -1,6 +1,6 @@
 {
   "name": "opencode-magpie-plugin",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Discover Magpie providers and models in OpenCode V2 with built-in pricing and automatic local gateway startup",
   "type": "module",
   "main": "./dist/index.mjs",

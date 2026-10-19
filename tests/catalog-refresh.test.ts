@@ -126,15 +126,16 @@ describe('catalog refresh for a model Magpie cannot price', () => {
     const seen: Inventory[] = [];
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     const cleanup = await setupPlugin(context((catalog) => seen.push(catalog)));
-    expect(seen[0][0].models[0].enabled).toBe(false);
+    expect(seen[0][0].models[0].enabled).toBe(true);
+    expect(seen[0][0].models[0].cost).toEqual([]);
     expect(downloads()).toBe(0);
     await vi.advanceTimersByTimeAsync(30_000);
     await vi.waitFor(() => expect(downloads()).toBe(1));
     await vi.waitFor(async () => {
       await vi.advanceTimersByTimeAsync(30_000);
-      expect(seen.at(-1)?.[0].models[0].enabled).toBe(true);
+      expect(seen.at(-1)?.[0].models[0].cost[0]?.input).toBe(1);
     });
-    await vi.waitFor(() => expect(seen.at(-1)?.[0].models[0].enabled).toBe(true));
+    await vi.waitFor(() => expect(seen.at(-1)?.[0].models[0].cost[0]?.input).toBe(1));
     expect(downloads()).toBe(1);
     expect(seen.at(-1)?.[0].models[0].cost[0]).toMatchObject({ input: 1, output: 4 });
     await cleanup?.();
@@ -177,7 +178,8 @@ describe('catalog refresh for a model Magpie cannot price', () => {
     await vi.waitFor(() => expect(warn).toHaveBeenCalled());
     await Promise.all([loadCatalogCache(true), loadCatalogCache(true)]);
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(seen.at(-1)?.[0].models[0].enabled).toBe(false);
+    expect(seen.at(-1)?.[0].models[0].enabled).toBe(true);
+    expect(seen.at(-1)?.[0].models[0].cost).toEqual([]);
     warn.mockRestore();
     await cleanup?.();
   });

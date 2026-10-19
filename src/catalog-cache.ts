@@ -229,7 +229,9 @@ export const lookupCatalogPrice = (
           ? 'google'
           : id.startsWith('grok-')
             ? 'xai'
-            : undefined;
+            : id.startsWith('muse-')
+              ? 'meta'
+              : undefined;
   return vendor && vendor !== maker ? priceInProvider(catalog, vendor, id) : undefined;
 };
 

@@ -1,4 +1,4 @@
-import { buildInventory, hasUnpricedModel } from './catalog.js';
+import { buildInventory, hasUnpricedModel, parsePresentation } from './catalog.js';
 import { type CatalogCache, loadCatalogCache } from './catalog-cache.js';
 import { loadFastModelIDs } from './fast-models.js';
 import { ensureGateway, fetchModels, resolveBaseURL } from './gateway.js';
@@ -11,12 +11,15 @@ const plugin: Plugin2 = {
 
 export const setupPlugin: Plugin2['setup'] = async (ctx) => {
   if (!ctx.provider) throw new Error('Magpie 插件需要 OpenCode V2 provider.transform。');
+  // Parsed once. The first catalog and the 30s refresh close over the same presentation.
+  const presentation = parsePresentation(ctx.options);
   const baseURL = await resolveBaseURL();
   await ensureGateway(baseURL);
   let catalog: CatalogCache = await loadCatalogCache();
   let inventory = buildInventory(await fetchModels(baseURL), baseURL, {
     catalog: catalog.data,
     fastModelIDs: await loadFastModelIDs(),
+    presentation,
   });
   const { track, cleanup } = createTrackedSetup();
   let disposed = false;
@@ -67,6 +70,7 @@ export const setupPlugin: Plugin2['setup'] = async (ctx) => {
       const next = buildInventory(rows, baseURL, {
         catalog: catalog.data,
         fastModelIDs: await loadFastModelIDs(),
+        presentation,
       });
       await apply(next);
     } catch (error) {

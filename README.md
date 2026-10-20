@@ -85,6 +85,8 @@ Routing group（例如 `group/auto`）会跨多个服务路由，因此不按 `o
 
 ### 目录呈现
 
+新版 Auto Group 的 `auto/<model>` 也按路由组处理，默认放在 `magpie-magpie`，选择器 ID 为 `auto-<model>`，请求仍发送原始 `auto/<model>`。它按 `auto-<model>` 匹配下述 `groups.prefix`，因此可用 `auto-` 单独分桶；模型名中的点号保持原样。旧的 `group/` 格式继续支持，普通厂商模型不会被自动组覆盖。自动组及其 Fast 变体仅采用 Magpie 报价。
+
 路由组的成员由 Magpie 维护；这个插件只决定 OpenCode 选择器里怎么摆。分组、显示名和排序写在 `opencode.jsonc` 的插件 `options` 里，升级插件包之后仍在，不用再改 `dist`。空 options（或仍用字符串引用插件）和不声明时完全一样：所有 `group/` 行都在 `magpie-magpie`。
 
 ```jsonc
@@ -109,7 +111,7 @@ Routing group（例如 `group/auto`）会跨多个服务路由，因此不按 `o
 
 上面只是写法示例，不是插件默认值。语义：
 
-- 只对 id 以 `group/` 开头的行分桶。`groups` 按 `prefix` 最长优先匹配。命中后 provider 是 `magpie-<id>`，显示名是 `name`，选择器里的模型 id 去掉这段 prefix（`group/adams-deepseek-v4.1-flash` → `magpie-adams/deepseek-v4.1-flash`）。发给 Magpie 的仍是原始 id。没匹配到的组保持今天的行为：`magpie-magpie`，显示名 Magpie，id 不去前缀。厂商模型（`cursor/`、`workbuddy/`）不受 `groups` 影响。
+- 只对 id 以 `group/` 或 `auto/` 开头的行分桶。`groups` 按 `prefix` 最长优先匹配。命中后 provider 是 `magpie-<id>`，显示名是 `name`，选择器里的模型 id 去掉这段 prefix（`group/adams-deepseek-v4.1-flash` → `magpie-adams/deepseek-v4.1-flash`）。发给 Magpie 的仍是原始 id。没匹配到的组保持今天的行为：`magpie-magpie`，显示名 Magpie，id 不去前缀。厂商模型（`cursor/`、`workbuddy/`）不受 `groups` 影响。
 - OpenCode 同 provider 内按 `time.released` 倒序排。`order` 的 key 是最终 provider id，值是最终模型 id（已去前缀），越靠前越靠前。名单里没有的保持 0，退化为字母序。`-fast` 克隆继承父模型的权重并紧跟在后面；不要给它单独写一条，除非那个 `-fast` id 自己出现在 `order` 里。provider 之间的顺序控制不了。
 - 插件不隐藏模型。网关列出的都会出现，没标价的也一样。不想在 OpenCode 里看到某个组，在 Magpie 里处理：不用了就 `magpie group rm <id>`，只对 OpenCode 收窄就用 `magpie visible opencode …`。组的成员是厂商模型时，删掉一个组不会影响把同一批模型当成员的其他组。
 

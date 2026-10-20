@@ -46,6 +46,13 @@ export const hasUnpricedModel = (inventory: Inventory): boolean =>
 /** Routing groups route across providers, so they belong to Magpie itself rather than to a vendor. */
 const ROUTING_GROUP = 'magpie';
 
+const routingGroupKey = (id: string): string | undefined => {
+  if (id.startsWith('group/')) return id.slice('group/'.length);
+  // Keep Auto Group presentation prefixes separate from vendor model IDs.
+  if (id.startsWith('auto/')) return `auto-${id.slice('auto/'.length)}`;
+  return undefined;
+};
+
 const reasoningVariants = (row: MagpieModel, anthropic: boolean): ModelInfo2['variants'] => {
   if (row.reasoning === false) return [];
   const levels =
@@ -213,8 +220,8 @@ export const buildInventory = (
   rows
     .filter((row) => !row.kind && row.id.includes('/'))
     .forEach((row) => {
-      const group = row.id.startsWith('group/');
-      const groupKey = group ? row.id.slice('group/'.length) : undefined;
+      const groupKey = routingGroupKey(row.id);
+      const group = groupKey !== undefined;
       const bucket = groupKey
         ? // A prefix must leave a model id behind; a bare `group/adams-` stays on magpie-magpie.
           buckets.find(
@@ -228,7 +235,7 @@ export const buildInventory = (
       const modelID =
         bucket && groupKey
           ? groupKey.slice(bucket.prefix.length)
-          : row.id.slice(row.id.indexOf('/') + 1);
+          : (groupKey ?? row.id.slice(row.id.indexOf('/') + 1));
       const { cost } = modelCost(row, group, options.catalog);
 
       const model = toClassicModelInfo(providerID, modelID, {
@@ -296,7 +303,9 @@ export const buildInventory = (
         const row = rows.find((row) => row.id === model.modelID);
         const fastKey = `${model.id.replace(/@\d+(?:k|m)$/i, '')}-fast`;
         const fastPrice =
-          row && !row.id.startsWith('group/') && resolveModelPricingKey(fastKey)?.endsWith('-fast')
+          row &&
+          routingGroupKey(row.id) === undefined &&
+          resolveModelPricingKey(fastKey)?.endsWith('-fast')
             ? getModelPricing(fastKey, pricingProvider(row.owned_by))
             : undefined;
         return [

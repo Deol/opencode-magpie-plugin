@@ -41,6 +41,8 @@ export type ProviderEditor = {
 };
 
 export type PluginContext = {
+  /** Object-form plugin options from opencode.jsonc. Absent when the package is listed as a string. */
+  options?: unknown;
   provider?: {
     transform: (callback: (editor: ProviderEditor) => void) => Promise<Registration>;
     reload: () => Promise<void>;

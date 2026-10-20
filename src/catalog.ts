@@ -90,10 +90,91 @@ const providerName = (model: MagpieModel): string => {
  */
 export type PriceSource = 'builtin' | 'magpie' | 'models.dev' | 'none';
 
+/** One routing-group bucket. Membership stays in Magpie; this only places matching rows. */
+export type GroupBucket = {
+  prefix: string;
+  id: string;
+  name: string;
+};
+
+/**
+ * How the catalog is shown. Empty groups and order reproduce today's catalog: every group/
+ * row stays on magpie-magpie. Nothing here names a real routing group. Which models are
+ * listed at all is Magpie's call (`magpie visible`, `magpie group rm`), not this plugin's.
+ */
+export type CatalogPresentation = {
+  groups: readonly GroupBucket[];
+  /** Final provider id → final model id → time.released. Earlier order entries are larger. */
+  order: ReadonlyMap<string, ReadonlyMap<string, number>>;
+};
+
 export type InventoryOptions = {
   /** The cached models.dev catalog, for models neither the built-in table nor Magpie prices. */
   catalog?: ModelsDevCatalog;
   fastModelIDs?: ReadonlySet<string>;
+  /** Parsed once at setup and reused by the refresh. Omitted means an empty presentation. */
+  presentation?: CatalogPresentation;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const invalidOptions = (path: string, reason: string): Error =>
+  new Error(`Magpie 插件的 options 无效（opencode.jsonc → plugins → ${path}）：${reason}。`);
+
+const requiredString = (value: unknown, path: string): string => {
+  if (typeof value !== 'string' || value.length === 0)
+    throw invalidOptions(path, '必须是非空字符串');
+  return value;
+};
+
+const parseGroups = (value: unknown): GroupBucket[] => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw invalidOptions('options.groups', '必须是数组');
+  return value.map((entry, index) => {
+    const path = `options.groups[${index}]`;
+    if (!isRecord(entry)) throw invalidOptions(path, '必须是对象');
+    for (const key of Object.keys(entry)) {
+      if (key !== 'prefix' && key !== 'id' && key !== 'name')
+        throw invalidOptions(`${path}.${key}`, '不是已知字段');
+    }
+    return {
+      prefix: requiredString(entry.prefix, `${path}.prefix`),
+      id: requiredString(entry.id, `${path}.id`),
+      name: requiredString(entry.name, `${path}.name`),
+    };
+  });
+};
+
+const parseOrder = (value: unknown): Map<string, Map<string, number>> => {
+  if (value === undefined) return new Map();
+  if (!isRecord(value)) throw invalidOptions('options.order', '必须是对象');
+  const order = new Map<string, Map<string, number>>();
+  for (const [providerID, ids] of Object.entries(value)) {
+    const path = `options.order.${providerID}`;
+    if (!Array.isArray(ids)) throw invalidOptions(path, '必须是模型 id 数组');
+    const weights = new Map<string, number>();
+    for (const [index, id] of ids.entries()) {
+      const modelID = requiredString(id, `${path}[${index}]`);
+      // The first mention wins, so a repeated id does not sink below models listed after it.
+      if (!weights.has(modelID)) weights.set(modelID, 1000 - index * 10);
+    }
+    order.set(providerID, weights);
+  }
+  return order;
+};
+
+/** Read presentation once. Invalid options fail startup instead of being skipped. */
+export const parsePresentation = (options: unknown): CatalogPresentation => {
+  if (options === undefined) return { groups: [], order: new Map() };
+  if (!isRecord(options)) throw invalidOptions('options', '必须是对象');
+  for (const key of Object.keys(options)) {
+    if (key !== 'groups' && key !== 'order') throw invalidOptions(`options.${key}`, '不是已知字段');
+  }
+  return {
+    groups: parseGroups(options.groups),
+    order: parseOrder(options.order),
+  };
 };
 
 const modelCost = (
@@ -118,6 +199,11 @@ export const buildInventory = (
 ): Inventory => {
   const providers = new Map<string, Inventory[number]>();
   const fastModelIDs = new Set(options.fastModelIDs);
+  const presentation = options.presentation ?? { groups: [], order: new Map() };
+  // Longest prefix wins, so a narrower bucket is not swallowed by a shorter one declared first.
+  const buckets = [...presentation.groups].sort(
+    (left, right) => right.prefix.length - left.prefix.length,
+  );
   for (const row of rows) {
     if (
       row.service_tiers?.some((tier) => (typeof tier === 'string' ? tier : tier.id) === 'priority')
@@ -128,10 +214,21 @@ export const buildInventory = (
     .filter((row) => !row.kind && row.id.includes('/'))
     .forEach((row) => {
       const group = row.id.startsWith('group/');
-      const owner = group ? ROUTING_GROUP : row.owned_by;
+      const groupKey = group ? row.id.slice('group/'.length) : undefined;
+      const bucket = groupKey
+        ? // A prefix must leave a model id behind; a bare `group/adams-` stays on magpie-magpie.
+          buckets.find(
+            (entry) => groupKey.length > entry.prefix.length && groupKey.startsWith(entry.prefix),
+          )
+        : undefined;
+      const owner = group ? (bucket?.id ?? ROUTING_GROUP) : row.owned_by;
       // Names are the Magpie groups; IDs are namespaced so an existing Cursor plugin is not replaced.
       const providerID = `magpie-${encodeURIComponent(owner)}`;
-      const modelID = row.id.slice(row.id.indexOf('/') + 1);
+      // A matched bucket drops its prefix from the picker id. The wire id stays the gateway row.
+      const modelID =
+        bucket && groupKey
+          ? groupKey.slice(bucket.prefix.length)
+          : row.id.slice(row.id.indexOf('/') + 1);
       const { cost } = modelCost(row, group, options.catalog);
 
       const model = toClassicModelInfo(providerID, modelID, {
@@ -161,10 +258,13 @@ export const buildInventory = (
         transport: 'http',
       };
       model.variants = reasoningVariants(row, !!anthropic);
+      // Written before the Fast clone so a spread copies the parent's weight. A -fast id
+      // keeps 0 unless that exact id is itself in the order list.
+      model.time = { released: presentation.order.get(providerID)?.get(model.id) ?? 0 };
       const entry = providers.get(providerID) ?? {
         info: {
           id: providerID,
-          name: group ? 'Magpie' : providerName(row),
+          name: bucket ? bucket.name : group ? 'Magpie' : providerName(row),
           activation: 'enabled' as const,
           package: '@opencode/ai/providers/openai-compatible',
           settings: {

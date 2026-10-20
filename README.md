@@ -25,7 +25,7 @@ OpenCode V2
 
 - `opencode.jsonc` 只加载插件，不维护 `providers.models`。
 - 启动时发现目录，每 30 秒刷新；服务新增、模型下线都能反映到 OpenCode。
-- Provider 显示 Magpie 中的分组名称，而不是统一挤在一个 “Magpie” 下；路由分组统一归入 Magpie。
+- Provider 显示 Magpie 中的分组名称，而不是统一挤在一个 “Magpie” 下。路由分组默认仍归入 Magpie；要换呈现方式，在插件 `options` 里声明，不要改构建产物。
 - 内置独立价格表和模型名归一化逻辑，支持输入、输出、缓存读取与写入价格。
 - Magpie 已安装但未运行时自动启动；macOS 上找到 app 内的可执行文件时优先启动 app，保留路由页；未安装时给出安装链接。
 - 登录和服务凭据由 Magpie 管理，插件不需要复制上游 token。
@@ -81,7 +81,39 @@ opencode service restart
 
 示例模型仅说明格式，实际列表取决于 Magpie 当前账号与配置。Magpie 自定义 provider ID 会原样映射为带 `magpie-` 前缀的 ID。
 
-Routing group（例如 `group/auto`）会跨多个服务路由，因此不按 `owned_by` 或首个候选服务拆成 provider，而是统一归到 **Magpie** 分组下。发送时仍保留 `group/auto`，价格只用 Magpie 给出的价格，不按成员猜测。
+Routing group（例如 `group/auto`）会跨多个服务路由，因此不按 `owned_by` 或首个候选服务拆成 provider。没有插件 options 时，它们统一归到 **Magpie** 分组下。发送时仍保留网关原始 id（`group/auto`），价格只用 Magpie 给出的价格，不按成员猜测。
+
+### 目录呈现
+
+路由组的成员由 Magpie 维护；这个插件只决定 OpenCode 选择器里怎么摆。分组、显示名和排序写在 `opencode.jsonc` 的插件 `options` 里，升级插件包之后仍在，不用再改 `dist`。空 options（或仍用字符串引用插件）和不声明时完全一样：所有 `group/` 行都在 `magpie-magpie`。
+
+```jsonc
+{
+  "plugins": [
+    {
+      "package": "opencode-magpie-plugin",
+      "options": {
+        "groups": [
+          { "prefix": "adams-", "id": "adams", "name": "Adams" },
+          { "prefix": "combo-", "id": "combo", "name": "Combo" }
+        ],
+        "order": {
+          "magpie-adams": ["deepseek-v4.1-flash"],
+          "magpie-cursor": ["grok-4.7@500k"]
+        }
+      }
+    }
+  ]
+}
+```
+
+上面只是写法示例，不是插件默认值。语义：
+
+- 只对 id 以 `group/` 开头的行分桶。`groups` 按 `prefix` 最长优先匹配。命中后 provider 是 `magpie-<id>`，显示名是 `name`，选择器里的模型 id 去掉这段 prefix（`group/adams-deepseek-v4.1-flash` → `magpie-adams/deepseek-v4.1-flash`）。发给 Magpie 的仍是原始 id。没匹配到的组保持今天的行为：`magpie-magpie`，显示名 Magpie，id 不去前缀。厂商模型（`cursor/`、`workbuddy/`）不受 `groups` 影响。
+- OpenCode 同 provider 内按 `time.released` 倒序排。`order` 的 key 是最终 provider id，值是最终模型 id（已去前缀），越靠前越靠前。名单里没有的保持 0，退化为字母序。`-fast` 克隆继承父模型的权重并紧跟在后面；不要给它单独写一条，除非那个 `-fast` id 自己出现在 `order` 里。provider 之间的顺序控制不了。
+- 插件不隐藏模型。网关列出的都会出现，没标价的也一样。不想在 OpenCode 里看到某个组，在 Magpie 里处理：不用了就 `magpie group rm <id>`，只对 OpenCode 收窄就用 `magpie visible opencode …`。组的成员是厂商模型时，删掉一个组不会影响把同一批模型当成员的其他组。
+
+`options` 非法会在启动时失败，并写明出错字段的路径，不会静默忽略。改 options 后要重启 OpenCode 服务（`opencode service restart`）。热重载不一定会重新执行 `setup`，目录的 30 秒刷新也仍用启动时解析的那一份。
 
 ## 自动发现与请求行为
 
@@ -146,6 +178,10 @@ MAGPIE_ADDR=127.0.0.1:3426 opencode --standalone
 4. 所有来源均没有价格时，模型仍然列出、仍然可选，只是不填 `cost`。空费用不是 0 元，OpenCode 不会把它当成免费；实际费用以 Magpie 或服务账单为准。**路由组**同样如此：Magpie 只在组内全部成员同价时才给组报价，而路由组每一轮的成员由路由决定，成本本来就是一个区间而不是单一数字。路由分组仍只用 Magpie 报价，不根据 `auto-*` 名称推断成员价格。
 
 models.dev 缓存写入 `$XDG_CACHE_HOME/opencode-magpie-plugin/models.json`（默认 `~/.cache/opencode-magpie-plugin/models.json`）。首次可只读复用 Magpie、OpenCode 的 `models.json`；下载只写插件自己的目录。每次模型刷新检查缓存，超过 24 小时后台更新，缺价时可提前到 6 小时；同进程下载去重且失败后至少间隔 6 小时重试。首次下载和更新不阻塞模型发现，成功后下一次 30 秒刷新采用新目录；离线保留旧缓存。下载源为 `https://models.dev/api.json`，仍然零运行时依赖，基础价和 context 阶梯价一并传给 OpenCode。
+
+### 未发布
+
+- 目录呈现改为插件 options：路由组的分桶、显示名和排序写在 `opencode.jsonc`，升级不再冲掉使用者自己的摆法。默认为空，与之前的目录一致。网关、价格表和 Fast 计价不变。
 
 ### 0.1.9
 
@@ -238,8 +274,10 @@ pnpm check
 | `/plugins` 没有 `magpie.providers` | 全局配置是否被当前服务读取；file 模式是否填写 `dist` 目录并已构建；查看 OpenCode 日志 |
 | 提示未安装 Magpie | 安装 [Magpie](https://usemagpie.ai/zh/)，确认服务进程 PATH 可以找到它 |
 | 启动超时 | 手动执行 `magpie serve` 查看错误，检查监听端口 |
-| 插件已加载但没有模型 | 在 Magpie 登录并启用服务，检查 `/v1/models` 是否有模型及有效价格 |
+| 插件已加载但没有模型 | 在 Magpie 登录并启用服务，检查 `/v1/models` 是否有模型；缺价不再隐藏模型 |
 | 添加模型后没出现 | 等待下一个 30 秒刷新周期；初次初始化失败则重载 OpenCode |
+| 改了 options 但分组没变 | 重启 OpenCode 服务；reload 不一定重新执行 setup |
+| profile 报 Model unavailable | id 是否和 `groups` 一致（去前缀后的 id）；该组是否已在 Magpie 里删掉 |
 | 原有 Cursor 与新 Cursor 同时出现 | 两个插件可同时存在；Magpie 的内部 ID 是 `magpie-cursor` |
 | 费用和实际账单不同 | 查看上面的价格优先级、迟到用量和阶梯价格边界 |
 
@@ -262,7 +300,7 @@ pnpm pack
 
 维护者发布采用 tag 驱动：推送与 `package.json.version` 一致的 `v<version>` tag 后，GitHub Actions 自动检查、发布公网 npm 并创建 GitHub Release。正式版使用 `latest`，预发布版使用 `next`。完整步骤、认证要求与失败恢复见 [发布指南](docs/releasing.md)。
 
-测试覆盖目录分组与替换、wire model ID、协议元数据、价格归一化与覆盖、未知价格、会话头、网关身份检查、自动启动与并发去重、未安装提示、刷新失败和清理。测试不消耗真实服务额度。
+测试覆盖目录分组与替换、options 呈现（分桶、排序、非法配置）、wire model ID、协议元数据、价格归一化与覆盖、未知价格、会话头、网关身份检查、自动启动与并发去重、未安装提示、刷新失败和清理。测试不消耗真实服务额度。
 
 只发布 `dist`、README 和许可证，**没有 runtime dependencies**。价格表变更时应更新相应测试，并在 release 说明价格来源与变化。
 

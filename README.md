@@ -179,7 +179,7 @@ MAGPIE_ADDR=127.0.0.1:3426 opencode --standalone
 
 models.dev 缓存写入 `$XDG_CACHE_HOME/opencode-magpie-plugin/models.json`（默认 `~/.cache/opencode-magpie-plugin/models.json`）。首次可只读复用 Magpie、OpenCode 的 `models.json`；下载只写插件自己的目录。每次模型刷新检查缓存，超过 24 小时后台更新，缺价时可提前到 6 小时；同进程下载去重且失败后至少间隔 6 小时重试。首次下载和更新不阻塞模型发现，成功后下一次 30 秒刷新采用新目录；离线保留旧缓存。下载源为 `https://models.dev/api.json`，仍然零运行时依赖，基础价和 context 阶梯价一并传给 OpenCode。
 
-### 未发布
+### 0.2.0
 
 - 目录呈现改为插件 options：路由组的分桶、显示名和排序写在 `opencode.jsonc`，升级不再冲掉使用者自己的摆法。默认为空，与之前的目录一致。网关、价格表和 Fast 计价不变。
 

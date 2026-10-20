@@ -1,3 +1,4 @@
+import { normalizeOpenAICallIDs } from './call-ids.js';
 import { buildInventory, hasUnpricedModel, parsePresentation } from './catalog.js';
 import { type CatalogCache, loadCatalogCache } from './catalog-cache.js';
 import { loadFastModelIDs } from './fast-models.js';
@@ -32,6 +33,9 @@ export const setupPlugin: Plugin2['setup'] = async (ctx) => {
         });
       }),
     );
+    for (const name of ['context', 'compaction', 'generate', 'title'] as const) {
+      await track(ctx.session.hook(name, normalizeOpenAICallIDs, { providerID: 'openai' }));
+    }
     await track(
       ctx.session.hook('http.request', async (event) => {
         const url = new URL(event.request.url);

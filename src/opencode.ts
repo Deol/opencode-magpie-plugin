@@ -1,3 +1,5 @@
+import type { ModelMessages } from './call-ids.js';
+
 /** Structural subset of the OpenCode V2 plugin API; the host supplies the runtime. */
 export type Registration = { dispose: () => Promise<void> };
 
@@ -48,11 +50,20 @@ export type PluginContext = {
     reload: () => Promise<void>;
   };
   session: {
-    hook: (
-      name: 'http.request',
-      callback: (event: { sessionID: string; request: Request }) => Promise<void>,
+    hook: <Name extends keyof SessionHookEvents>(
+      name: Name,
+      callback: (event: SessionHookEvents[Name]) => Promise<void> | void,
+      options?: { providerID?: string },
     ) => Promise<Registration>;
   };
+};
+
+type SessionHookEvents = {
+  'http.request': { sessionID: string; request: Request };
+  context: ModelMessages;
+  compaction: ModelMessages;
+  generate: ModelMessages;
+  title: ModelMessages;
 };
 
 export type Plugin2 = {

@@ -225,6 +225,6 @@ describe('Magpie discovery', () => {
     expect(catalog[0].info.name).toBe('WorkBuddy');
     warn.mockRestore();
     await cleanup?.();
-    expect(dispose).toHaveBeenCalledTimes(2);
+    expect(dispose).toHaveBeenCalledTimes(6);
   });
 });

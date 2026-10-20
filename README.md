@@ -139,6 +139,8 @@ Fast 模型优先采用内置表中明确登记的 Fast 费率及上下文档位
 
 消息、工具调用和工具结果由 OpenCode 原生 runtime 编码，再由 Magpie 转接。插件传递 `X-Magpie-Session` 保持会话标识，并指定 HTTP 传输。模型上游支持的完整能力仍取决于 Magpie 和相应服务。
 
+切换到 `openai` provider 时，插件会在请求编码前，将历史中超过 64 字符的工具调用 ID 稳定映射为 48 字符，并同步替换对应工具结果的 ID。这适用于 HTTP、WebSocket 及压缩请求，不修改持久化历史、工具参数或输出。实测范围见 [工具调用 ID 兼容性验证](docs/call-id-compatibility.md)。
+
 思考档位按所选协议编码：Chat 使用 `reasoning_effort`，Responses 使用 `reasoning.effort`，Anthropic 使用 `thinking.type=adaptive` 配合 `output_config.effort`；Anthropic 的 `none` 关闭 thinking。
 
 刷新成功时替换完整目录；刷新失败保留最近一次成功的目录。首次发现失败会报告初始化错误，不生成虚假的可用模型。

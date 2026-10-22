@@ -90,6 +90,9 @@ const providerName = (model: MagpieModel): string => {
   );
 };
 
+/** Magpie writes context windows as `Claude Opus 5.5 @ 1m`. The picker shows `@1m`. */
+export const displayName = (name: string): string => name.replace(/@\s+(\d+(?:k|m))/gi, '@$1');
+
 /**
  * How much a model is trusted to cost, in the order Magpie looks for a price:
  * the built-in table, then Magpie's own price, then the models.dev catalog.
@@ -240,7 +243,7 @@ export const buildInventory = (
 
       const model = toClassicModelInfo(providerID, modelID, {
         id: row.id,
-        name: row.display_name ?? modelID,
+        name: displayName(row.display_name ?? modelID),
         cost,
         limit: {
           context: row.context_window || 128_000,

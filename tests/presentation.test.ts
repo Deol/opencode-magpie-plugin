@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildInventory, type MagpieModel, parsePresentation } from '../src/catalog.js';
+import {
+  buildInventory,
+  displayName,
+  type MagpieModel,
+  parsePresentation,
+} from '../src/catalog.js';
 import plugin from '../src/index.js';
 import type { PluginContext } from '../src/opencode.js';
 
@@ -48,6 +53,22 @@ const byProvider = (inventory: ReturnType<typeof entry>, id: string) => {
   if (!found) throw new Error(`missing provider ${id}`);
   return found;
 };
+
+describe('display names', () => {
+  it('removes the space Magpie puts before a context window', () => {
+    expect(displayName('Claude Opus 5.5 @ 1m')).toBe('Claude Opus 5.5 @1m');
+    expect(displayName('Grok 4.7 @ 500k')).toBe('Grok 4.7 @500k');
+    expect(displayName('Gemini 4 Argon')).toBe('Gemini 4 Argon');
+  });
+
+  it('shows the tightened name on vendor models', () => {
+    const inventory = buildInventory(
+      [vendor('cursor', 'claude-opus-5-5@1m', { display_name: 'Claude Opus 5.5 @ 1m' })],
+      baseURL,
+    );
+    expect(byProvider(inventory, 'magpie-cursor').models[0].name).toBe('Claude Opus 5.5 @1m');
+  });
+});
 
 describe('catalog presentation', () => {
   it('leaves every routing group on magpie-magpie when options are empty', () => {
